@@ -1,0 +1,24 @@
+{
+  "name": "campus-reporter",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "College community issue reporting system with geo-tagged, photo-backed complaints and HOD / Office admin dashboards",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev:server": "node --watch server/index.js",
+    "dev:client": "npm --prefix client run dev",
+    "build": "npm --prefix client install && npm --prefix client run build",
+    "setup": "npm install && npm run build"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.5.0"
+  }
+}
