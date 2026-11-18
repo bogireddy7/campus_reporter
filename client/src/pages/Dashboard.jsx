@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import MapView from './MapView.jsx';
 import { api, catLabel, formatDate, mapLink, STATUS_LABEL } from '../api.js';
 
 const ROLE_LABEL = { hod: 'Head of Department', office: 'Admin Office' };
@@ -147,6 +148,7 @@ export default function Dashboard({ user }) {
   const [issues, setIssues] = useState([]);
   const [filters, setFilters] = useState({ status: '', category: '', priority: '', q: '' });
   const [openId, setOpenId] = useState(null);
+  const [view, setView] = useState('list'); // list | map
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -209,8 +211,15 @@ export default function Dashboard({ user }) {
         </select>
       </div>
 
+      <div className="view-toggle" role="tablist" aria-label="View">
+        <button role="tab" aria-selected={view === 'list'} className={view === 'list' ? 'on' : ''} onClick={() => setView('list')}>☰ List</button>
+        <button role="tab" aria-selected={view === 'map'} className={view === 'map' ? 'on' : ''} onClick={() => setView('map')}>📍 Map</button>
+      </div>
+
       {error && <p className="error-text">{error}</p>}
-      {loading ? (
+      {view === 'map' && !loading ? (
+        <MapView issues={issues} onOpen={setOpenId} />
+      ) : loading ? (
         <p className="muted">Loading…</p>
       ) : issues.length === 0 ? (
         <div className="empty">No complaints match these filters.</div>

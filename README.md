@@ -8,6 +8,7 @@ A college community issue-reporting system. Anyone on campus can report a proble
 - **Report form**: camera/photo upload, category (choose **Other** and type your own name for the problem), urgency, description, "Tag my current location" (browser GPS) plus a typed place name
 - **Tracking ID** (e.g. `CR-3M8H2F`) so reporters can check progress without an account (contact details are never shown on the public page)
 - **Staff create their own accounts** (HOD, Admin Office) using a staff access code, then share one dashboard: stats, filters (status / category / priority / search), urgent issues sorted first, auto-refresh every 30 s
+- **Map view**: the dashboard has a List / Map toggle that shows every geo-tagged complaint as a coloured pin (by priority) on OpenStreetMap
 - **Issue detail**: full photo, description, reporter details, map link for the GPS tag, status + priority update with a note, full history
 - Photo type/size validation (JPG/PNG/WebP, 6 MB), JWT login, hashed passwords, rate-limited login/sign-up/OTP (codes are hashed, expire in 10 minutes, work once, lock after 5 wrong tries)
 
@@ -47,6 +48,10 @@ TWILIO_ACCOUNT_SID=... TWILIO_AUTH_TOKEN=... TWILIO_FROM=+1xxxxxxxxxx
 ```
 Note: sending SMS to Indian numbers usually needs the provider's DLT / sender registration, so email OTP is the easier option to start with.
 
+## Deploy online
+
+See **[DEPLOY.md](DEPLOY.md)** for putting the site on the internet with HTTPS (Render blueprint included).
+
 ## Develop
 
 ```bash
@@ -64,5 +69,4 @@ npm run dev:client   # Vite on :5173, proxies /api and /uploads
 
 - Email/SMS notification to the reporter when status changes
 - Route categories automatically (e.g. academic → HOD, infrastructure → Office)
-- Map view of all geo-tagged complaints
 - Password reset / change screen

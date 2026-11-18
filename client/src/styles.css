@@ -213,3 +213,15 @@ legend { padding: 0 6px; font-weight: 600; font-size: .9rem; }
 .facts dt { color: var(--muted); } .facts dd { margin: 0; }
 .update-form { background: var(--brand-soft); border-radius: 12px; padding: 14px; margin-top: 10px; }
 .update-form h3 { margin-top: 0; }
+
+/* view toggle + map */
+.view-toggle { display: inline-flex; background: var(--brand-soft); border-radius: 99px; padding: 4px; margin-bottom: 14px; gap: 2px; }
+.view-toggle button { border: 0; background: transparent; padding: 7px 18px; border-radius: 99px; font: inherit; font-weight: 600; color: var(--info); cursor: pointer; }
+.view-toggle button.on { background: var(--gradient); color: #fff; box-shadow: 0 2px 8px rgba(79, 70, 229, .3); }
+.map-wrap { margin-bottom: 10px; }
+.map { height: min(62vh, 560px); min-height: 340px; border-radius: var(--radius); border: 1px solid var(--line); box-shadow: var(--shadow); background: #dfe3f7; z-index: 0; }
+.map-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 10px 2px 2px; font-size: .82rem; color: var(--muted); }
+.map-legend i { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; border: 2px solid #fff; box-shadow: 0 0 0 1px var(--line); }
+.map-popup { min-width: 170px; }
+.map-popup-meta { color: var(--muted); font-size: .8rem; margin: 2px 0; }
+.map-popup .btn { margin-top: 8px; color: #fff; }

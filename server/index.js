@@ -12,8 +12,13 @@ import { parseContact, requestOtp, verifyOtp } from './otp.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3001;
+const IS_PROD = process.env.NODE_ENV === 'production';
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-only-secret-change-me';
 if (!process.env.JWT_SECRET) {
+  if (IS_PROD) {
+    console.error('JWT_SECRET must be set when NODE_ENV=production. Exiting.');
+    process.exit(1);
+  }
   console.warn('WARNING: JWT_SECRET not set, using an insecure development default.');
 }
 
@@ -63,6 +68,7 @@ if (!STAFF_CODE) {
 
 // ---------- helpers ----------
 const app = express();
+app.set('trust proxy', 1); // behind the host's HTTPS proxy, so rate limits see the real visitor IP
 app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static(uploadDir, { maxAge: '7d' }));
@@ -127,6 +133,7 @@ const num = (v) => {
 };
 
 // ---------- public routes ----------
+app.get('/healthz', (_req, res) => res.send('ok'));
 app.get('/api/meta', (_req, res) => res.json({ categories: CATEGORIES, priorities: PRIORITIES, statuses: STATUSES }));
 
 // Step 1: ask for a code (sent by email or SMS to the contact the reporter gave).

@@ -73,6 +73,9 @@ async function sendSms(to, code) {
  * server terminal instead (fine for local testing; set SMTP_* / TWILIO_* for real use).
  * The code is never included in the API response.
  */
+const consoleOtpAllowed = () => process.env.NODE_ENV !== 'production' || process.env.ALLOW_CONSOLE_OTP === '1';
+export const channelReady = (type) => (type === 'email' ? smtpReady() : smsReady()) || consoleOtpAllowed();
+
 async function deliver(contact, code) {
   if (contact.type === 'email' && smtpReady()) {
     await sendEmail(contact.value, code);
@@ -88,6 +91,12 @@ async function deliver(contact, code) {
 
 // ---------- public API used by the routes ----------
 export async function requestOtp({ name, rollNo, contact }) {
+  if (!channelReady(contact.type)) {
+    return {
+      error: `Verification by ${contact.type === 'email' ? 'email' : 'SMS'} is not set up on this site yet. Please try the other option or contact the administrator.`,
+      status: 503,
+    };
+  }
   const now = Date.now();
   const recent = db
     .prepare('SELECT created_at FROM otps WHERE contact = ? AND created_at > ? ORDER BY created_at DESC')
