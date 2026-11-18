@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { api, formatDate, mapLink, STATUS_LABEL } from '../api.js';
+import { api, catLabel, formatDate, mapLink, STATUS_LABEL } from '../api.js';
 
 const ROLE_LABEL = { hod: 'Head of Department', office: 'Admin Office' };
 
@@ -72,7 +72,7 @@ function Detail({ id, onClose, onChanged }) {
           <>
             <div className="row between top">
               <div>
-                <p className="muted">{issue.tracking_id} · {issue.category}</p>
+                <p className="muted">{issue.tracking_id} · {catLabel(issue)}</p>
                 <h2>{issue.title}</h2>
               </div>
               <span className={`pill s-${issue.status}`}>{STATUS_LABEL[issue.status]}</span>
@@ -102,7 +102,7 @@ function Detail({ id, onClose, onChanged }) {
               <dd>
                 {issue.reporter_name}
                 {issue.reporter_id ? ` (${issue.reporter_id})` : ''}
-                {issue.reporter_contact && <><br />{issue.reporter_contact}</>}
+                {issue.reporter_contact && <><br />{issue.reporter_contact}{issue.reporter_verified ? <span className="vtag">✓ verified {issue.reporter_contact_type === 'email' ? 'email' : 'phone'}</span> : null}</>}
               </dd>
               <dt>Reported</dt>
               <dd>{formatDate(issue.created_at)}</dd>
@@ -227,7 +227,7 @@ export default function Dashboard({ user }) {
                 <p className="clip">{i.description}</p>
                 <p className="meta">
                   <span className={`prio ${i.priority}`}>{i.priority}</span>
-                  {i.category} · {i.location_text || (i.lat != null ? 'GPS tagged' : 'No location')}
+                  {catLabel(i)} · {i.location_text || (i.lat != null ? 'GPS tagged' : 'No location')}
                   {i.lat != null && ' 📍'} · {i.reporter_name} · {formatDate(i.created_at)}
                 </p>
               </div>

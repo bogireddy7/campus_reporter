@@ -48,7 +48,27 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
+  -- One-time passcodes for reporter verification (only a hash of the code is stored).
+  CREATE TABLE IF NOT EXISTS otps (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    contact TEXT NOT NULL,
+    contact_type TEXT NOT NULL CHECK (contact_type IN ('email', 'phone')),
+    code_hash TEXT NOT NULL,
+    name TEXT NOT NULL,
+    roll_no TEXT NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    expires_at INTEGER NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+
   CREATE INDEX IF NOT EXISTS idx_issues_status ON issues(status);
   CREATE INDEX IF NOT EXISTS idx_updates_issue ON updates(issue_id);
+  CREATE INDEX IF NOT EXISTS idx_otps_contact ON otps(contact);
 `);
+
+// Small migrations for databases created by earlier versions.
+const issueCols = db.prepare('PRAGMA table_info(issues)').all().map((c) => c.name);
+if (!issueCols.includes('category_other')) db.exec('ALTER TABLE issues ADD COLUMN category_other TEXT');
+if (!issueCols.includes('reporter_contact_type')) db.exec('ALTER TABLE issues ADD COLUMN reporter_contact_type TEXT');
+if (!issueCols.includes('reporter_verified')) db.exec('ALTER TABLE issues ADD COLUMN reporter_verified INTEGER NOT NULL DEFAULT 0');
 

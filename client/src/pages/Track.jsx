@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { api, formatDate, STATUS_LABEL } from '../api.js';
+import { api, catLabel, formatDate, STATUS_LABEL } from '../api.js';
 import { Timeline } from './Dashboard.jsx';
 
 export default function Track() {
@@ -36,7 +36,7 @@ export default function Track() {
             <span className={`pill s-${issue.status}`}>{STATUS_LABEL[issue.status]}</span>
           </div>
           <p className="muted">
-            {issue.tracking_id} · {issue.category}
+            {issue.tracking_id} · {catLabel(issue)}
             {issue.location_text ? ` · ${issue.location_text}` : ''} · reported {formatDate(issue.created_at)}
           </p>
           <h3>Progress</h3>

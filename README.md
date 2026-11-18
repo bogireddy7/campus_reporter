@@ -4,11 +4,12 @@ A college community issue-reporting system. Anyone on campus can report a proble
 
 ## Features
 
-- **Public report form**: camera/photo upload, category, urgency, description, "Tag my current location" (browser GPS) plus a typed place name, reporter name / roll no. / contact
+- **Verified reporting**: before reporting, a person enters their name, roll no. / staff ID and an email or mobile number, then confirms a 6-digit one-time code (OTP). Only then can they submit a complaint
+- **Report form**: camera/photo upload, category (choose **Other** and type your own name for the problem), urgency, description, "Tag my current location" (browser GPS) plus a typed place name
 - **Tracking ID** (e.g. `CR-3M8H2F`) so reporters can check progress without an account (contact details are never shown on the public page)
 - **Staff create their own accounts** (HOD, Admin Office) using a staff access code, then share one dashboard: stats, filters (status / category / priority / search), urgent issues sorted first, auto-refresh every 30 s
 - **Issue detail**: full photo, description, reporter details, map link for the GPS tag, status + priority update with a note, full history
-- Photo type/size validation (JPG/PNG/WebP, 6 MB), JWT login, hashed passwords, rate-limited login/sign-up
+- Photo type/size validation (JPG/PNG/WebP, 6 MB), JWT login, hashed passwords, rate-limited login/sign-up/OTP (codes are hashed, expire in 10 minutes, work once, lock after 5 wrong tries)
 
 ## Run it
 
@@ -30,6 +31,21 @@ The HOD and the Admin Office person each open **http://localhost:3001/admin/regi
 - The code is generated once and saved in `data/staff-code.txt`. To choose your own, start with `STAFF_CODE=your-code npm start`.
 - Share the code only with the HOD and Admin Office. Anyone who has it can create a staff account.
 - Set a long random `JWT_SECRET` environment variable when you deploy for real.
+
+## Sending the OTP (email / SMS)
+
+Out of the box no email or SMS service is connected, so the code is **printed in the server terminal** (look for `[OTP] ... Code for ...`). That is fine for testing on your own computer. For real use, set one or both of these before `npm start`:
+
+**Email (any SMTP, e.g. Gmail with an App Password):**
+```bash
+SMTP_HOST=smtp.gmail.com SMTP_PORT=587 SMTP_USER=you@gmail.com SMTP_PASS=your-app-password SMTP_FROM="Campus Reporter <you@gmail.com>"
+```
+
+**SMS (Twilio):**
+```bash
+TWILIO_ACCOUNT_SID=... TWILIO_AUTH_TOKEN=... TWILIO_FROM=+1xxxxxxxxxx
+```
+Note: sending SMS to Indian numbers usually needs the provider's DLT / sender registration, so email OTP is the easier option to start with.
 
 ## Develop
 

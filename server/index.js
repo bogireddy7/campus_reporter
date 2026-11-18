@@ -8,6 +8,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { db } from './db.js';
+import { parseContact, requestOtp, verifyOtp } from './otp.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3001;
@@ -81,10 +82,27 @@ function auth(req, res, next) {
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
   if (!token) return res.status(401).json({ error: 'Login required' });
   try {
-    req.user = jwt.verify(token, JWT_SECRET);
+    const payload = jwt.verify(token, JWT_SECRET);
+    if (!['hod', 'office'].includes(payload.role)) throw new Error('not staff'); // reporter tokens are not staff
+    req.user = payload;
     next();
   } catch {
     res.status(401).json({ error: 'Session expired, please log in again' });
+  }
+}
+
+// Reporters must verify their email / phone with an OTP before they can submit a complaint.
+function reporterAuth(req, res, next) {
+  const header = req.headers.authorization || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+  if (!token) return res.status(401).json({ error: 'Please verify your email or phone number first' });
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    if (payload.kind !== 'reporter') throw new Error('not a reporter token');
+    req.reporter = payload;
+    next();
+  } catch {
+    res.status(401).json({ error: 'Your verification has expired. Please verify again.' });
   }
 }
 
@@ -111,18 +129,55 @@ const num = (v) => {
 // ---------- public routes ----------
 app.get('/api/meta', (_req, res) => res.json({ categories: CATEGORIES, priorities: PRIORITIES, statuses: STATUSES }));
 
-app.post('/api/issues', (req, res) => {
+// Step 1: ask for a code (sent by email or SMS to the contact the reporter gave).
+app.post('/api/otp/request', authLimit, async (req, res) => {
+  const name = clean(req.body.name, 80);
+  const rollNo = clean(req.body.roll_no, 40);
+  const contact = parseContact(req.body.contact);
+  if (!name) return res.status(400).json({ error: 'Please enter your name' });
+  if (!rollNo) return res.status(400).json({ error: 'Please enter your roll number / staff ID' });
+  if (!contact) return res.status(400).json({ error: 'Enter a valid email address or 10-digit mobile number' });
+
+  let result;
+  try {
+    result = await requestOtp({ name, rollNo, contact });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Something went wrong. Please try again.' });
+  }
+  if (result.error) return res.status(result.status).json({ error: result.error });
+  res.json({ ok: true, contact: contact.value, contact_type: contact.type, delivery: result.delivery });
+});
+
+// Step 2: confirm the code. Returns a short-lived token that allows submitting complaints.
+app.post('/api/otp/verify', authLimit, (req, res) => {
+  const contact = parseContact(req.body.contact);
+  if (!contact) return res.status(400).json({ error: 'Enter a valid email address or mobile number' });
+  const result = verifyOtp({ contact, code: req.body.code });
+  if (result.error) return res.status(result.status).json({ error: result.error });
+
+  const reporter = { name: result.name, roll_no: result.rollNo, contact: contact.value, contact_type: result.contactType };
+  const token = jwt.sign({ kind: 'reporter', ...reporter }, JWT_SECRET, { expiresIn: '60m' });
+  res.json({ token, reporter });
+});
+
+app.post('/api/issues', reporterAuth, (req, res) => {
   upload.single('photo')(req, res, (err) => {
     if (err) return res.status(400).json({ error: err.message });
 
+    const reporter = req.reporter; // verified details come from the token, not from the form
     const title = clean(req.body.title, 120);
     const description = clean(req.body.description, 2000);
     const category = CATEGORIES.includes(req.body.category) ? req.body.category : 'Other';
-    const reporterName = clean(req.body.reporter_name, 80);
+    const categoryOther = category === 'Other' ? clean(req.body.category_other, 60) : '';
 
-    if (!title || !description || !reporterName) {
+    if (!title || !description) {
       if (req.file) fs.unlink(req.file.path, () => {});
-      return res.status(400).json({ error: 'Title, description and your name are required' });
+      return res.status(400).json({ error: 'Title and description are required' });
+    }
+    if (category === 'Other' && !categoryOther) {
+      if (req.file) fs.unlink(req.file.path, () => {});
+      return res.status(400).json({ error: 'Please type what kind of problem this is' });
     }
     if (!req.file) {
       return res.status(400).json({ error: 'Please attach a photo of the problem' });
@@ -140,14 +195,14 @@ app.post('/api/issues', (req, res) => {
     const result = db
       .prepare(
         `INSERT INTO issues
-         (tracking_id, title, description, category, priority, location_text, lat, lng, photo,
-          reporter_name, reporter_id, reporter_contact)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         (tracking_id, title, description, category, category_other, priority, location_text, lat, lng, photo,
+          reporter_name, reporter_id, reporter_contact, reporter_contact_type, reporter_verified)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`
       )
       .run(
-        tid, title, description, category, priority,
+        tid, title, description, category, categoryOther || null, priority,
         clean(req.body.location_text, 200) || null, lat, lng, req.file.filename,
-        reporterName, clean(req.body.reporter_id, 40) || null, clean(req.body.reporter_contact, 80) || null
+        reporter.name, reporter.roll_no, reporter.contact, reporter.contact_type
       );
 
     db.prepare('INSERT INTO updates (issue_id, author, status, note) VALUES (?, ?, ?, ?)').run(
@@ -162,7 +217,7 @@ app.post('/api/issues', (req, res) => {
 app.get('/api/track/:tid', (req, res) => {
   const issue = db
     .prepare(
-      `SELECT id, tracking_id, title, category, priority, status, location_text, created_at, updated_at
+      `SELECT id, tracking_id, title, category, category_other, priority, status, location_text, created_at, updated_at
        FROM issues WHERE tracking_id = ?`
     )
     .get(clean(req.params.tid, 20).toUpperCase());
@@ -229,9 +284,9 @@ app.get('/api/admin/issues', auth, (req, res) => {
   if (PRIORITIES.includes(req.query.priority)) { where.push('priority = ?'); params.push(req.query.priority); }
   const q = clean(req.query.q, 80);
   if (q) {
-    where.push('(title LIKE ? OR description LIKE ? OR tracking_id LIKE ? OR reporter_name LIKE ? OR location_text LIKE ?)');
+    where.push('(title LIKE ? OR description LIKE ? OR tracking_id LIKE ? OR reporter_name LIKE ? OR location_text LIKE ? OR category_other LIKE ? OR reporter_id LIKE ?)');
     const like = `%${q}%`;
-    params.push(like, like, like, like, like);
+    params.push(like, like, like, like, like, like, like);
   }
   const sql = `SELECT * FROM issues ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
     ORDER BY (status IN ('resolved','rejected')) ASC, ${PRIORITY_ORDER} ASC, created_at DESC LIMIT 500`;

@@ -22,9 +22,26 @@ export const session = {
   },
 };
 
-async function request(path, { method = 'GET', body, form } = {}) {
+// A reporter proves their email / phone with an OTP and gets a short-lived token (kept per browser tab).
+const REPORTER_KEY = 'cr_reporter';
+export const reporterSession = {
+  get() {
+    try {
+      const data = JSON.parse(sessionStorage.getItem(REPORTER_KEY) || 'null');
+      if (!data) return null;
+      const exp = JSON.parse(atob(data.token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).exp * 1000;
+      if (Date.now() > exp) { sessionStorage.removeItem(REPORTER_KEY); return null; }
+      return data; // { token, reporter }
+    } catch { return null; }
+  },
+  save(data) { try { sessionStorage.setItem(REPORTER_KEY, JSON.stringify(data)); } catch { /* storage unavailable */ } },
+  clear() { try { sessionStorage.removeItem(REPORTER_KEY); } catch { /* storage unavailable */ } },
+};
+
+async function request(path, { method = 'GET', body, form, token } = {}) {
   const headers = {};
-  if (session.token) headers.Authorization = `Bearer ${session.token}`;
+  const bearer = token ?? session.token;
+  if (bearer) headers.Authorization = `Bearer ${bearer}`;
   let payload;
   if (form) payload = form;
   else if (body) {
@@ -34,7 +51,10 @@ async function request(path, { method = 'GET', body, form } = {}) {
   const res = await fetch(path, { method, headers, body: payload });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    if (res.status === 401 && session.token) {
+    if (res.status === 401 && token) {
+      reporterSession.clear();
+      window.dispatchEvent(new Event('cr-reporter-expired'));
+    } else if (res.status === 401 && session.token) {
       session.clear();
       window.dispatchEvent(new Event('cr-logout'));
     }
@@ -45,7 +65,9 @@ async function request(path, { method = 'GET', body, form } = {}) {
 
 export const api = {
   meta: () => request('/api/meta'),
-  submitIssue: (form) => request('/api/issues', { method: 'POST', form }),
+  requestOtp: (body) => request('/api/otp/request', { method: 'POST', body, token: '' }),
+  verifyOtp: (body) => request('/api/otp/verify', { method: 'POST', body, token: '' }),
+  submitIssue: (form, token) => request('/api/issues', { method: 'POST', form, token }),
   track: (tid) => request(`/api/track/${encodeURIComponent(tid)}`),
   register: (body) => request('/api/auth/register', { method: 'POST', body }),
   login: (email, password) => request('/api/auth/login', { method: 'POST', body: { email, password } }),
@@ -67,6 +89,9 @@ export function formatDate(s) {
   const d = new Date(s.replace(' ', 'T') + 'Z');
   return d.toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
+
+export const catLabel = (issue) =>
+  issue.category === 'Other' && issue.category_other ? `Other: ${issue.category_other}` : issue.category;
 
 export function mapLink(lat, lng) {
   return `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=18/${lat}/${lng}`;
