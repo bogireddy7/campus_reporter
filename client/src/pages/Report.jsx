@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, mapLink, reporterSession } from '../api.js';
+import { api, mapLink, reporterSession, session } from '../api.js';
 
 const maskContact = (c) => `${c.slice(0, 3)} ${'•'.repeat(5)}${c.slice(-3)}`; // +91 •••••210
 
@@ -228,22 +228,24 @@ function ReportForm({ auth, onChangeUser }) {
 
   return (
     <section className="card narrow">
-      <div className="steps">
-        <span className="step done"><b>✓</b> Your details</span>
-        <span className="step-line done" />
-        <span className="step done"><b>✓</b> Confirm code</span>
-        <span className="step-line done" />
-        <span className="step on"><b>3</b> Report</span>
-      </div>
+      {!reporter.staff && (
+        <div className="steps">
+          <span className="step done"><b>✓</b> Your details</span>
+          <span className="step-line done" />
+          <span className="step done"><b>✓</b> Confirm code</span>
+          <span className="step-line done" />
+          <span className="step on"><b>3</b> Report</span>
+        </div>
+      )}
 
       <div className="verified">
-        <span className="verified-badge">✓ Verified</span>
+        <span className="verified-badge">{reporter.staff ? '✓ Staff' : '✓ Verified'}</span>
         <div>
           <strong>{reporter.name}</strong> · {reporter.roll_no}
           <br />
-          <span className="muted-inline">{maskContact(reporter.contact)}</span>
+          <span className="muted-inline">{reporter.staff ? 'Logged in, no verification needed' : maskContact(reporter.contact)}</span>
         </div>
-        <button type="button" className="link" onClick={onChangeUser}>Not you?</button>
+        {!reporter.staff && <button type="button" className="link" onClick={onChangeUser}>Not you?</button>}
       </div>
 
       <h1>Report a campus problem</h1>
@@ -326,7 +328,7 @@ function ReportForm({ auth, onChangeUser }) {
   );
 }
 
-export default function Report() {
+export default function Report({ user }) {
   const [auth, setAuth] = useState(() => reporterSession.get());
 
   useEffect(() => {
@@ -335,6 +337,16 @@ export default function Report() {
     return () => window.removeEventListener('cr-reporter-expired', expired);
   }, []);
 
+  // HOD / Admin Office are already logged in, so they report directly without an OTP.
+  if (user && session.token) {
+    const roll = user.role === 'hod' ? 'HOD' : 'Admin Office';
+    return (
+      <ReportForm
+        auth={{ token: session.token, reporter: { name: user.name, roll_no: roll, contact: user.email, contact_type: 'email', staff: true } }}
+        onChangeUser={() => {}}
+      />
+    );
+  }
   if (!auth) return <Verify onVerified={setAuth} />;
   return <ReportForm auth={auth} onChangeUser={() => { reporterSession.clear(); setAuth(null); }} />;
 }

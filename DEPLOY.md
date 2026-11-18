@@ -9,6 +9,7 @@ An https address is needed so phones can use the **Tag my current location** but
 3. Fill in the secret values it asks for:
    - `STAFF_CODE`: a code only the HOD and Admin Office know (they need it on the sign-up page)
    - `FAST2SMS_API_KEY`: your SMS key (see "SMS setup" below)
+   - `GOOGLE_MAPS_API_KEY`: for the dashboard map (see the README)
 4. Click **Apply**. After a few minutes you get an address like `https://campus-reporter.onrender.com`.
 5. Open `/admin/register` on that address: the HOD and the Admin Office person create their accounts with the staff code.
 
@@ -35,6 +36,6 @@ Cost protection: the site sends at most `SMS_DAILY_LIMIT` SMS per day (default 3
 
 ## Good to know
 
-- With `NODE_ENV=production` the site refuses to start without `JWT_SECRET`, and it will **not** print OTP codes in the logs. If SMS is not set up, reporters see "SMS verification is not set up yet". (For a throwaway demo only, `ALLOW_CONSOLE_OTP=1` prints codes in the server log.)
+- With `NODE_ENV=production` the site refuses to start without `JWT_SECRET`. Codes are only ever sent by SMS; if `FAST2SMS_API_KEY` is missing, reporters see "SMS verification is not set up yet".
 - Back up the disk (database + `uploads/`) regularly.
-- Map tiles come from OpenStreetMap, which is fine for a college-sized site.
+- The dashboard map uses Google Maps. Add `GOOGLE_MAPS_API_KEY` (see the README) and restrict the key to your live website address.

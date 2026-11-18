@@ -51,12 +51,14 @@ async function request(path, { method = 'GET', body, form, token } = {}) {
   const res = await fetch(path, { method, headers, body: payload });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    if (res.status === 401 && token) {
-      reporterSession.clear();
-      window.dispatchEvent(new Event('cr-reporter-expired'));
-    } else if (res.status === 401 && session.token) {
-      session.clear();
-      window.dispatchEvent(new Event('cr-logout'));
+    if (res.status === 401) {
+      if (bearer && bearer === session.token) {
+        session.clear(); // a staff session ended
+        window.dispatchEvent(new Event('cr-logout'));
+      } else if (token) {
+        reporterSession.clear(); // a reporter's OTP verification ended
+        window.dispatchEvent(new Event('cr-reporter-expired'));
+      }
     }
     throw new Error(data.error || 'Request failed');
   }
@@ -73,6 +75,7 @@ export const api = {
   login: (email, password) => request('/api/auth/login', { method: 'POST', body: { email, password } }),
   issues: (params) => request('/api/admin/issues?' + new URLSearchParams(params)),
   issue: (id) => request(`/api/admin/issues/${id}`),
+  deleteIssue: (id) => request(`/api/admin/issues/${id}`, { method: 'DELETE' }),
   updateIssue: (id, body) => request(`/api/admin/issues/${id}`, { method: 'PATCH', body }),
   stats: () => request('/api/admin/stats'),
 };
@@ -93,6 +96,10 @@ export function formatDate(s) {
 export const catLabel = (issue) =>
   issue.category === 'Other' && issue.category_other ? `Other: ${issue.category_other}` : issue.category;
 
+// Google Maps: show the spot, or start turn-by-turn navigation to it (opens the Google Maps app on phones).
 export function mapLink(lat, lng) {
-  return `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=18/${lat}/${lng}`;
+  return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+}
+export function navLink(lat, lng) {
+  return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`;
 }

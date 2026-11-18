@@ -26,8 +26,7 @@ const smsProvider = () => {
   if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_FROM) return 'twilio';
   return null;
 };
-const consoleOtpAllowed = () => process.env.NODE_ENV !== 'production' || process.env.ALLOW_CONSOLE_OTP === '1';
-export const smsAvailable = () => Boolean(smsProvider()) || consoleOtpAllowed();
+export const smsAvailable = () => Boolean(smsProvider());
 
 async function sendFast2sms(phone, code) {
   const number = phone.slice(-10); // Fast2SMS wants the 10-digit number
@@ -60,18 +59,12 @@ async function sendTwilio(phone, code) {
   if (!res.ok) throw new Error(`Twilio returned HTTP ${res.status}`);
 }
 
-/**
- * Sends the code by SMS. With no SMS provider configured (local testing only) the code is
- * printed in the server terminal instead. The code is never included in the API response.
- */
-async function deliver(phone, code) {
+/** Sends the code to the phone by SMS. The code is never printed in the logs or returned by the API. */
+export async function deliver(phone, code) {
   const provider = smsProvider();
   if (provider === 'fast2sms') await sendFast2sms(phone, code);
   else if (provider === 'twilio') await sendTwilio(phone, code);
-  else {
-    console.log(`\n[OTP] No SMS provider configured. Code for ${phone}: ${code}\n`);
-    return 'console';
-  }
+  else throw new Error('No SMS provider configured');
   return 'sms';
 }
 
@@ -87,7 +80,7 @@ function underDailyCap() {
 // ---------- public API used by the routes ----------
 export async function requestOtp({ name, rollNo, contact }) {
   if (!smsAvailable()) {
-    return { error: 'SMS verification is not set up on this site yet. Please contact the administrator.', status: 503 };
+    return { error: 'SMS verification is not set up on this site yet. The administrator needs to add the SMS API key.', status: 503 };
   }
   const now = Date.now();
   const recent = db
@@ -100,7 +93,7 @@ export async function requestOtp({ name, rollNo, contact }) {
   if (recent.length >= MAX_REQUESTS_PER_HOUR) {
     return { error: 'Too many codes requested for this number. Please try again in an hour.', status: 429 };
   }
-  if (smsProvider() && !underDailyCap()) {
+  if (!underDailyCap()) {
     return { error: 'Verification is temporarily unavailable (daily SMS limit reached). Please try again tomorrow or contact the administrator.', status: 503 };
   }
 
@@ -112,7 +105,7 @@ export async function requestOtp({ name, rollNo, contact }) {
     console.error('OTP delivery failed:', err.message);
     return { error: 'Could not send the SMS. Please check the number and try again in a minute.', status: 502 };
   }
-  if (delivery === 'sms') smsToday++;
+  smsToday++;
 
   // Older codes stay in the table (they still count toward the hourly limit); verification only uses the newest.
   db.prepare(

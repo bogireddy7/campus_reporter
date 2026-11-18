@@ -1,3 +1,4 @@
+import './env.js'; // must stay first: loads the .env file before anything reads settings
 import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
@@ -8,7 +9,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { db } from './db.js';
-import { parseContact, requestOtp, verifyOtp } from './otp.js';
+import { parseContact, requestOtp, smsAvailable, verifyOtp } from './otp.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3001;
@@ -98,17 +99,28 @@ function auth(req, res, next) {
 }
 
 // Reporters must verify their mobile number with an SMS OTP before they can submit a complaint.
+// Logged-in staff (HOD / Admin Office) are already authenticated, so they can report without an OTP.
 function reporterAuth(req, res, next) {
   const header = req.headers.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
   if (!token) return res.status(401).json({ error: 'Please verify your mobile number first' });
   try {
     const payload = jwt.verify(token, JWT_SECRET);
-    if (payload.kind !== 'reporter') throw new Error('not a reporter token');
-    req.reporter = payload;
+    if (payload.kind === 'reporter') {
+      req.reporter = payload;
+    } else if (['hod', 'office'].includes(payload.role)) {
+      req.reporter = {
+        name: payload.name,
+        roll_no: payload.role === 'hod' ? 'HOD' : 'Admin Office',
+        contact: payload.email,
+        contact_type: 'email',
+      };
+    } else {
+      throw new Error('unknown token');
+    }
     next();
   } catch {
-    res.status(401).json({ error: 'Your verification has expired. Please verify again.' });
+    res.status(401).json({ error: 'Your session has expired. Please verify again.' });
   }
 }
 
@@ -134,7 +146,9 @@ const num = (v) => {
 
 // ---------- public routes ----------
 app.get('/healthz', (_req, res) => res.send('ok'));
-app.get('/api/meta', (_req, res) => res.json({ categories: CATEGORIES, priorities: PRIORITIES, statuses: STATUSES }));
+app.get('/api/meta', (_req, res) =>
+  res.json({ categories: CATEGORIES, priorities: PRIORITIES, statuses: STATUSES, maps_key: process.env.GOOGLE_MAPS_API_KEY || '' })
+);
 
 // Step 1: ask for a code (sent by SMS to the mobile number the reporter gave).
 app.post('/api/otp/request', authLimit, async (req, res) => {
@@ -332,6 +346,17 @@ app.patch('/api/admin/issues/:id', auth, (req, res) => {
   res.json({ ok: true });
 });
 
+// Permanently deletes a report (its photo and history too). Either staff account may do this.
+app.delete('/api/admin/issues/:id', auth, (req, res) => {
+  const issue = db.prepare('SELECT * FROM issues WHERE id = ?').get(Number(req.params.id));
+  if (!issue) return res.status(404).json({ error: 'Report not found (it may already be deleted)' });
+  db.prepare('INSERT INTO deletions (tracking_id, title, deleted_by) VALUES (?, ?, ?)')
+    .run(issue.tracking_id, issue.title, `${req.user.name} (${req.user.role === 'hod' ? 'HOD' : 'Admin Office'})`);
+  db.prepare('DELETE FROM issues WHERE id = ?').run(issue.id); // its history rows are removed with it
+  if (issue.photo) fs.unlink(path.join(uploadDir, path.basename(issue.photo)), () => {});
+  res.json({ ok: true });
+});
+
 app.get('/api/admin/stats', auth, (_req, res) => {
   const byStatus = Object.fromEntries(STATUSES.map((s) => [s, 0]));
   for (const r of db.prepare('SELECT status, COUNT(*) AS c FROM issues GROUP BY status').all()) byStatus[r.status] = r.c;
@@ -359,4 +384,10 @@ app.use((err, _req, res, _next) => {
 app.listen(PORT, () => {
   console.log(`Campus Reporter running on http://localhost:${PORT}`);
   console.log(`Staff registration code: ${STAFF_CODE}  (give it only to the HOD and Admin Office)`);
+  console.log(
+    smsAvailable()
+      ? 'SMS codes: ON (sent to the reporter\'s phone)'
+      : 'SMS codes: NOT SET UP. Reporters cannot verify until you add FAST2SMS_API_KEY (see README, "Sending the OTP by SMS").'
+  );
+  if (!process.env.GOOGLE_MAPS_API_KEY) console.log('Google Maps: no GOOGLE_MAPS_API_KEY, the dashboard map shows a list with Navigate links instead.');
 });

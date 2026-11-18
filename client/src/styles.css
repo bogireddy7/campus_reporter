@@ -233,3 +233,17 @@ legend { padding: 0 6px; font-weight: 600; font-size: .9rem; }
   border: 1px solid #d6d9ee; border-right: 0; border-radius: 10px 0 0 10px; font-weight: 700;
 }
 .phone-input input { border-radius: 0 10px 10px 0; }
+
+/* delete + navigate */
+.row-actions { display: inline-flex; align-items: center; gap: 8px; }
+.icon-btn { border: 0; background: transparent; cursor: pointer; font-size: 1.05rem; padding: 4px 6px; border-radius: 8px; line-height: 1; opacity: .7; }
+.icon-btn:hover { background: var(--bad-bg); opacity: 1; }
+.btn.danger { background: #fff; color: var(--bad); border-color: #f2b8b2; }
+.btn.danger:hover { background: var(--bad-bg); }
+.danger-zone { margin-top: 26px; padding-top: 16px; border-top: 1px dashed var(--line); display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.nav-btn { margin-top: 6px; background: #1a73e8; color: #fff; border-color: #1a73e8; }
+.nav-btn:hover { background: #1765cc; }
+.map-fallback { background: var(--card); border: 1px dashed #c3c7ee; border-radius: var(--radius); padding: 20px; }
+.map-fallback ul { list-style: none; padding: 0; margin: 12px 0 0; display: flex; flex-direction: column; gap: 8px; }
+.map-fallback li { display: flex; justify-content: space-between; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.map-popup-actions { display: flex; gap: 8px; margin-top: 8px; align-items: center; }

@@ -43,7 +43,7 @@ export default function App() {
       </header>
       <main>
         <Routes>
-          <Route path="/" element={<Report />} />
+          <Route path="/" element={<Report user={user} />} />
           <Route path="/track" element={<Track />} />
           <Route path="/track/:tid" element={<Track />} />
           <Route path="/admin/login" element={user ? <Navigate to="/admin" /> : <Login onLogin={setUser} />} />

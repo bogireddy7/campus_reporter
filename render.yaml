@@ -28,5 +28,7 @@ services:
         sync: false
       - key: FAST2SMS_ROUTE    # 'otp' (default) or 'q' for Quick SMS
         value: otp
+      - key: GOOGLE_MAPS_API_KEY  # dashboard map (restrict the key to your site address)
+        sync: false
       - key: SMS_DAILY_LIMIT   # max SMS per day for the whole site
         value: 300

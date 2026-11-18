@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import MapView from './MapView.jsx';
-import { api, catLabel, formatDate, mapLink, STATUS_LABEL } from '../api.js';
+import { api, catLabel, formatDate, mapLink, navLink, STATUS_LABEL } from '../api.js';
 
 const ROLE_LABEL = { hod: 'Head of Department', office: 'Admin Office' };
 
@@ -30,7 +30,7 @@ function Stat({ label, value, tone, active, onClick }) {
   );
 }
 
-function Detail({ id, onClose, onChanged }) {
+function Detail({ id, onClose, onChanged, onDelete }) {
   const [issue, setIssue] = useState(null);
   const [status, setStatus] = useState('');
   const [priority, setPriority] = useState('');
@@ -93,7 +93,11 @@ function Detail({ id, onClose, onChanged }) {
                   <>
                     <br />
                     <a href={mapLink(issue.lat, issue.lng)} target="_blank" rel="noreferrer">
-                      📍 Open on map ({issue.lat.toFixed(5)}, {issue.lng.toFixed(5)})
+                      📍 View on Google Maps ({issue.lat.toFixed(5)}, {issue.lng.toFixed(5)})
+                    </a>
+                    <br />
+                    <a className="btn small nav-btn" href={navLink(issue.lat, issue.lng)} target="_blank" rel="noreferrer">
+                      ➜ Navigate here
                     </a>
                   </>
                 )}
@@ -103,7 +107,7 @@ function Detail({ id, onClose, onChanged }) {
               <dd>
                 {issue.reporter_name}
                 {issue.reporter_id ? ` (${issue.reporter_id})` : ''}
-                {issue.reporter_contact && <><br />{issue.reporter_contact}{issue.reporter_verified ? <span className="vtag">✓ verified mobile</span> : null}</>}
+                {issue.reporter_contact && <><br />{issue.reporter_contact}{issue.reporter_verified ? <span className="vtag">{issue.reporter_contact_type === 'email' ? '✓ staff' : '✓ verified mobile'}</span> : null}</>}
               </dd>
               <dt>Reported</dt>
               <dd>{formatDate(issue.created_at)}</dd>
@@ -135,6 +139,11 @@ function Detail({ id, onClose, onChanged }) {
 
             <h3>History</h3>
             <Timeline items={issue.timeline} />
+
+            <div className="danger-zone">
+              <button type="button" className="btn danger" onClick={() => onDelete(issue)}>🗑 Delete this report</button>
+              <span className="muted-inline">Removes the report, its photo and history for good.</span>
+            </div>
           </>
         )}
       </aside>
@@ -172,6 +181,20 @@ export default function Dashboard({ user }) {
     const t = setInterval(refresh, 30000); // pick up new complaints automatically
     return () => clearInterval(t);
   }, [refresh]);
+
+  const removeIssue = async (issue) => {
+    const ok = window.confirm(
+      `Delete this report permanently?\n\n"${issue.title}" (${issue.tracking_id})\n\nIts photo and history will be removed. This cannot be undone.`
+    );
+    if (!ok) return;
+    try {
+      await api.deleteIssue(issue.id);
+      setOpenId((cur) => (cur === issue.id ? null : cur));
+      await refresh();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
 
   const setF = (k) => (e) => setFilters((f) => ({ ...f, [k]: e.target.value }));
   const statusFilter = (s) => setFilters((f) => ({ ...f, status: f.status === s ? '' : s }));
@@ -218,7 +241,7 @@ export default function Dashboard({ user }) {
 
       {error && <p className="error-text">{error}</p>}
       {view === 'map' && !loading ? (
-        <MapView issues={issues} onOpen={setOpenId} />
+        <MapView issues={issues} onOpen={setOpenId} mapsKey={meta.maps_key} />
       ) : loading ? (
         <p className="muted">Loading…</p>
       ) : issues.length === 0 ? (
@@ -231,7 +254,16 @@ export default function Dashboard({ user }) {
               <div className="issue-body">
                 <div className="row between">
                   <strong>{i.title}</strong>
-                  <span className={`pill s-${i.status}`}>{STATUS_LABEL[i.status]}</span>
+                  <span className="row-actions">
+                    <span className={`pill s-${i.status}`}>{STATUS_LABEL[i.status]}</span>
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      title="Delete this report"
+                      aria-label={`Delete report ${i.tracking_id}`}
+                      onClick={(e) => { e.stopPropagation(); removeIssue(i); }}
+                    >🗑</button>
+                  </span>
                 </div>
                 <p className="clip">{i.description}</p>
                 <p className="meta">
@@ -245,7 +277,7 @@ export default function Dashboard({ user }) {
         </ul>
       )}
 
-      {openId && <Detail id={openId} onClose={() => setOpenId(null)} onChanged={refresh} />}
+      {openId && <Detail id={openId} onClose={() => setOpenId(null)} onChanged={refresh} onDelete={removeIssue} />}
     </section>
   );
 }

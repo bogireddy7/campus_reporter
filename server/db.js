@@ -61,6 +61,15 @@ db.exec(`
     created_at INTEGER NOT NULL
   );
 
+  -- Who deleted which report and when (the report itself is removed for good).
+  CREATE TABLE IF NOT EXISTS deletions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tracking_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    deleted_by TEXT NOT NULL,
+    deleted_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
   CREATE INDEX IF NOT EXISTS idx_issues_status ON issues(status);
   CREATE INDEX IF NOT EXISTS idx_updates_issue ON updates(issue_id);
   CREATE INDEX IF NOT EXISTS idx_otps_contact ON otps(contact);
