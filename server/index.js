@@ -97,11 +97,11 @@ function auth(req, res, next) {
   }
 }
 
-// Reporters must verify their email / phone with an OTP before they can submit a complaint.
+// Reporters must verify their mobile number with an SMS OTP before they can submit a complaint.
 function reporterAuth(req, res, next) {
   const header = req.headers.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
-  if (!token) return res.status(401).json({ error: 'Please verify your email or phone number first' });
+  if (!token) return res.status(401).json({ error: 'Please verify your mobile number first' });
   try {
     const payload = jwt.verify(token, JWT_SECRET);
     if (payload.kind !== 'reporter') throw new Error('not a reporter token');
@@ -136,14 +136,14 @@ const num = (v) => {
 app.get('/healthz', (_req, res) => res.send('ok'));
 app.get('/api/meta', (_req, res) => res.json({ categories: CATEGORIES, priorities: PRIORITIES, statuses: STATUSES }));
 
-// Step 1: ask for a code (sent by email or SMS to the contact the reporter gave).
+// Step 1: ask for a code (sent by SMS to the mobile number the reporter gave).
 app.post('/api/otp/request', authLimit, async (req, res) => {
   const name = clean(req.body.name, 80);
   const rollNo = clean(req.body.roll_no, 40);
   const contact = parseContact(req.body.contact);
   if (!name) return res.status(400).json({ error: 'Please enter your name' });
   if (!rollNo) return res.status(400).json({ error: 'Please enter your roll number / staff ID' });
-  if (!contact) return res.status(400).json({ error: 'Enter a valid email address or 10-digit mobile number' });
+  if (!contact) return res.status(400).json({ error: 'Enter a valid 10-digit Indian mobile number' });
 
   let result;
   try {
@@ -159,7 +159,7 @@ app.post('/api/otp/request', authLimit, async (req, res) => {
 // Step 2: confirm the code. Returns a short-lived token that allows submitting complaints.
 app.post('/api/otp/verify', authLimit, (req, res) => {
   const contact = parseContact(req.body.contact);
-  if (!contact) return res.status(400).json({ error: 'Enter a valid email address or mobile number' });
+  if (!contact) return res.status(400).json({ error: 'Enter a valid 10-digit Indian mobile number' });
   const result = verifyOtp({ contact, code: req.body.code });
   if (result.error) return res.status(result.status).json({ error: result.error });
 

@@ -24,13 +24,9 @@ services:
         generateValue: true
       - key: STAFF_CODE        # the code the HOD / Admin Office use to create their accounts
         sync: false
-      - key: SMTP_HOST         # email OTP (e.g. smtp.gmail.com)
+      - key: FAST2SMS_API_KEY  # SMS OTP (Fast2SMS dashboard -> Dev API)
         sync: false
-      - key: SMTP_PORT
-        value: 587
-      - key: SMTP_USER
-        sync: false
-      - key: SMTP_PASS         # Gmail "App Password", not your normal password
-        sync: false
-      - key: SMTP_FROM
-        sync: false
+      - key: FAST2SMS_ROUTE    # 'otp' (default) or 'q' for Quick SMS
+        value: otp
+      - key: SMS_DAILY_LIMIT   # max SMS per day for the whole site
+        value: 300

@@ -2,13 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, mapLink, reporterSession } from '../api.js';
 
-const maskContact = (c, type) => {
-  if (type === 'email') {
-    const [u, d] = c.split('@');
-    return `${u.slice(0, 2)}${'•'.repeat(Math.max(u.length - 2, 2))}@${d}`;
-  }
-  return `${c.slice(0, 3)} ${'•'.repeat(5)}${c.slice(-3)}`;
-};
+const maskContact = (c) => `${c.slice(0, 3)} ${'•'.repeat(5)}${c.slice(-3)}`; // +91 •••••210
 
 /* ---------- Step 1 + 2: confirm who you are ---------- */
 function Verify({ onVerified }) {
@@ -74,7 +68,7 @@ function Verify({ onVerified }) {
         <form onSubmit={sendCode}>
           <h1>Verify yourself to report</h1>
           <p className="muted">
-            To keep complaints genuine, we confirm your email or mobile number with a one-time code before you can report a problem.
+            To keep complaints genuine, we confirm your mobile number with a one-time code sent by SMS before you can report a problem.
           </p>
           <label className="field">
             <span>Full name *</span>
@@ -85,9 +79,21 @@ function Verify({ onVerified }) {
             <input value={form.roll_no} onChange={set('roll_no')} maxLength={40} required />
           </label>
           <label className="field">
-            <span>Email or mobile number *</span>
-            <input value={form.contact} onChange={set('contact')} maxLength={120} required placeholder="you@gmail.com  or  9876543210" autoComplete="email" />
-            <small className="hint">We will send a 6-digit code here.</small>
+            <span>Mobile number *</span>
+            <div className="phone-input">
+              <span className="phone-prefix">+91</span>
+              <input
+                value={form.contact}
+                onChange={(e) => setForm((f) => ({ ...f, contact: e.target.value.replace(/[^\d+\s-]/g, '') }))}
+                maxLength={16}
+                required
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel"
+                placeholder="98765 43210"
+              />
+            </div>
+            <small className="hint">We will send a 6-digit code to this number by SMS.</small>
           </label>
           {error && <p className="error-text">{error}</p>}
           <button className="btn primary wide" disabled={busy}>{busy ? 'Sending code…' : 'Send verification code'}</button>
@@ -96,11 +102,11 @@ function Verify({ onVerified }) {
         <form onSubmit={confirm}>
           <h1>Enter the code</h1>
           <p className="muted">
-            We sent a 6-digit code to <strong>{maskContact(sent.contact, sent.contact_type)}</strong>. It is valid for 10 minutes.
+            We sent a 6-digit code by SMS to <strong>{maskContact(sent.contact)}</strong>. It is valid for 10 minutes.
           </p>
           {sent.delivery === 'console' && (
             <p className="notice">
-              Email / SMS sending is not set up on this server yet, so the code was printed in the server's terminal window (testing mode).
+              SMS sending is not set up on this server yet, so the code was printed in the server's terminal window (testing mode).
             </p>
           )}
           <label className="field">
@@ -235,7 +241,7 @@ function ReportForm({ auth, onChangeUser }) {
         <div>
           <strong>{reporter.name}</strong> · {reporter.roll_no}
           <br />
-          <span className="muted-inline">{maskContact(reporter.contact, reporter.contact_type)}</span>
+          <span className="muted-inline">{maskContact(reporter.contact)}</span>
         </div>
         <button type="button" className="link" onClick={onChangeUser}>Not you?</button>
       </div>

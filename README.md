@@ -4,7 +4,7 @@ A college community issue-reporting system. Anyone on campus can report a proble
 
 ## Features
 
-- **Verified reporting**: before reporting, a person enters their name, roll no. / staff ID and an email or mobile number, then confirms a 6-digit one-time code (OTP). Only then can they submit a complaint
+- **Verified reporting**: before reporting, a person enters their name, roll no. / staff ID and their mobile number, then confirms a 6-digit one-time code (OTP) sent by SMS. Only then can they submit a complaint
 - **Report form**: camera/photo upload, category (choose **Other** and type your own name for the problem), urgency, description, "Tag my current location" (browser GPS) plus a typed place name
 - **Tracking ID** (e.g. `CR-3M8H2F`) so reporters can check progress without an account (contact details are never shown on the public page)
 - **Staff create their own accounts** (HOD, Admin Office) using a staff access code, then share one dashboard: stats, filters (status / category / priority / search), urgent issues sorted first, auto-refresh every 30 s
@@ -33,20 +33,22 @@ The HOD and the Admin Office person each open **http://localhost:3001/admin/regi
 - Share the code only with the HOD and Admin Office. Anyone who has it can create a staff account.
 - Set a long random `JWT_SECRET` environment variable when you deploy for real.
 
-## Sending the OTP (email / SMS)
+## Sending the OTP by SMS
 
-Out of the box no email or SMS service is connected, so the code is **printed in the server terminal** (look for `[OTP] ... Code for ...`). That is fine for testing on your own computer. For real use, set one or both of these before `npm start`:
+Reporters verify with their **mobile number** (Indian numbers) and a 6-digit code sent by SMS.
 
-**Email (any SMTP, e.g. Gmail with an App Password):**
+Out of the box no SMS service is connected, so the code is **printed in the server terminal** (look for `[OTP] ... Code for ...`). That is fine for testing on your own computer. For real use, create a [Fast2SMS](https://www.fast2sms.com) account and set its API key before `npm start`:
+
 ```bash
-SMTP_HOST=smtp.gmail.com SMTP_PORT=587 SMTP_USER=you@gmail.com SMTP_PASS=your-app-password SMTP_FROM="Campus Reporter <you@gmail.com>"
+FAST2SMS_API_KEY=your-key npm start          # Windows PowerShell:  $env:FAST2SMS_API_KEY="your-key"; npm start
 ```
 
-**SMS (Twilio):**
-```bash
-TWILIO_ACCOUNT_SID=... TWILIO_AUTH_TOKEN=... TWILIO_FROM=+1xxxxxxxxxx
-```
-Note: sending SMS to Indian numbers usually needs the provider's DLT / sender registration, so email OTP is the easier option to start with.
+Optional settings:
+- `FAST2SMS_ROUTE=q` uses Fast2SMS "Quick SMS" (your own message text) instead of the default `otp` route. Check which route and price suit you in your Fast2SMS dashboard.
+- `SMS_DAILY_LIMIT=300` caps how many SMS the whole site can send per day, so nobody can drain your balance.
+- Twilio also works: set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` and `TWILIO_FROM` (Indian numbers usually need sender registration with Twilio).
+
+Per-number limits: 1 code per 30 s and 5 per hour.
 
 ## Deploy online
 

@@ -225,3 +225,11 @@ legend { padding: 0 6px; font-weight: 600; font-size: .9rem; }
 .map-popup { min-width: 170px; }
 .map-popup-meta { color: var(--muted); font-size: .8rem; margin: 2px 0; }
 .map-popup .btn { margin-top: 8px; color: #fff; }
+
+/* mobile number field */
+.phone-input { display: flex; align-items: stretch; }
+.phone-prefix {
+  display: grid; place-items: center; padding: 0 14px; background: var(--brand-soft); color: var(--info);
+  border: 1px solid #d6d9ee; border-right: 0; border-radius: 10px 0 0 10px; font-weight: 700;
+}
+.phone-input input { border-radius: 0 10px 10px 0; }
