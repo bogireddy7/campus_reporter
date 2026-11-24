@@ -9,7 +9,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { db } from './db.js';
-import { parseContact, requestOtp, smsAvailable, verifyOtp } from './otp.js';
+import { otpChannels, parseContact, requestOtp, verifyOtp } from './otp.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3001;
@@ -147,7 +147,7 @@ const num = (v) => {
 // ---------- public routes ----------
 app.get('/healthz', (_req, res) => res.send('ok'));
 app.get('/api/meta', (_req, res) =>
-  res.json({ categories: CATEGORIES, priorities: PRIORITIES, statuses: STATUSES, maps_key: process.env.GOOGLE_MAPS_API_KEY || '' })
+  res.json({ categories: CATEGORIES, priorities: PRIORITIES, statuses: STATUSES, maps_key: process.env.GOOGLE_MAPS_API_KEY || '', otp_channels: otpChannels() })
 );
 
 // Step 1: ask for a code (sent by SMS to the mobile number the reporter gave).
@@ -161,13 +161,13 @@ app.post('/api/otp/request', authLimit, async (req, res) => {
 
   let result;
   try {
-    result = await requestOtp({ name, rollNo, contact });
+    result = await requestOtp({ name, rollNo, contact, channel: req.body.channel });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: 'Something went wrong. Please try again.' });
   }
   if (result.error) return res.status(result.status).json({ error: result.error });
-  res.json({ ok: true, contact: contact.value, contact_type: contact.type, delivery: result.delivery });
+  res.json({ ok: true, contact: contact.value, contact_type: contact.type, delivery: result.delivery, channel: result.delivery });
 });
 
 // Step 2: confirm the code. Returns a short-lived token that allows submitting complaints.
@@ -384,10 +384,10 @@ app.use((err, _req, res, _next) => {
 app.listen(PORT, () => {
   console.log(`Campus Reporter running on http://localhost:${PORT}`);
   console.log(`Staff registration code: ${STAFF_CODE}  (give it only to the HOD and Admin Office)`);
-  console.log(
-    smsAvailable()
-      ? 'SMS codes: ON (sent to the reporter\'s phone)'
-      : 'SMS codes: NOT SET UP. Reporters cannot verify until you add FAST2SMS_API_KEY (see README, "Sending the OTP by SMS").'
-  );
+  const ch = otpChannels();
+  console.log(`SMS codes: ${ch.sms ? 'ON' : 'off (add FAST2SMS_API_KEY)'}   |   WhatsApp codes: ${ch.whatsapp ? 'ON' : 'off (add WHATSAPP_* settings)'}`);
+  if (!ch.sms && !ch.whatsapp) {
+    console.log('WARNING: no way to send codes is set up, so reporters cannot verify. See README, "Sending the code".');
+  }
   if (!process.env.GOOGLE_MAPS_API_KEY) console.log('Google Maps: no GOOGLE_MAPS_API_KEY, the dashboard map shows a list with Navigate links instead.');
 });

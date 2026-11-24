@@ -4,7 +4,7 @@ A college community issue-reporting system. Anyone on campus can report a proble
 
 ## Features
 
-- **Verified reporting**: before reporting, a person enters their name, roll no. / staff ID and their mobile number, then confirms a 6-digit one-time code (OTP) sent by SMS. Only then can they submit a complaint
+- **Verified reporting**: before reporting, a person enters their name, roll no. / staff ID and their mobile number, then confirms a 6-digit one-time code (OTP) sent by SMS or WhatsApp. Only then can they submit a complaint
 - **Report form**: camera/photo upload, category (choose **Other** and type your own name for the problem), urgency, description, "Tag my current location" (browser GPS) plus a typed place name
 - **Tracking ID** (e.g. `CR-3M8H2F`) so reporters can check progress without an account (contact details are never shown on the public page)
 - **Staff create their own accounts** (HOD, Admin Office) using a staff access code, then share one dashboard: stats, filters (status / category / priority / search), urgent issues sorted first, auto-refresh every 30 s
@@ -47,13 +47,28 @@ Settings go in a file called `.env` in the project folder, so you do not have to
 
 ### SMS one-time codes (required for reporters)
 
-Reporters verify with their **mobile number** (Indian numbers). The 6-digit code is sent **by SMS to their phone**. It is never shown on the screen or in the terminal, so without an SMS key reporters cannot verify.
+Reporters verify with their **mobile number** (Indian numbers). The 6-digit code is sent **to their phone by SMS or WhatsApp**. It is never shown on the screen or in the terminal, so until SMS or WhatsApp is set up reporters cannot verify.
 
 1. Create a [Fast2SMS](https://www.fast2sms.com) account, copy your API key from **Dev API**, and add some money to the wallet.
 2. Put it in `.env`: `FAST2SMS_API_KEY=your-key`
 3. Check it works: `npm run test:sms 9876543210` (use your own number). A test SMS should arrive.
 
 Optional: `FAST2SMS_ROUTE=q` uses Fast2SMS "Quick SMS" instead of the default `otp` route (check which is enabled / cheaper in your dashboard). `SMS_DAILY_LIMIT=300` caps the SMS the whole site can send per day. Twilio also works (`TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM`). Per-number limits: 1 code per 30 s and 5 per hour.
+
+### WhatsApp one-time codes (optional)
+
+If you fill in the WhatsApp settings, reporters can choose **SMS** or **WhatsApp** for their code (or only WhatsApp, if SMS is not set up). It uses Meta's official WhatsApp Business Cloud API. Meta's screens change, so follow their current guide if a step looks different.
+
+1. Go to https://developers.facebook.com, create an app (type **Business**) and add the **WhatsApp** product.
+2. Open **WhatsApp → API Setup**. It shows a free **test number**, its **Phone number ID** and a temporary **access token** (valid for about 24 hours). Add the phone numbers that may receive test messages (your own, friends') and confirm each with the code WhatsApp sends.
+3. In **WhatsApp Manager → Message templates**, create a template with category **Authentication** (name e.g. `campus_otp`, with the "copy code" button) and wait until it is approved.
+4. Put the values in `.env`: `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`, `WHATSAPP_TEMPLATE=campus_otp` and `WHATSAPP_TEMPLATE_LANG` (must match the template's language, e.g. `en_US`).
+5. Check it: `npm run test:sms 9876543210 whatsapp` (use a number you added in step 2).
+
+Good to know:
+- The test number is free but can only message the numbers you registered. For real students you need your own WhatsApp Business number, a payment method on the Meta account, and a permanent token (create a **System User** token in Meta Business settings). Meta charges per authentication message. Check Meta's current pricing page.
+- The temporary token stops working after about a day. If WhatsApp codes suddenly fail, make a new token.
+- The daily limit (`SMS_DAILY_LIMIT`) counts SMS and WhatsApp messages together.
 
 ### Google Maps (dashboard map)
 

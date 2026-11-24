@@ -13,6 +13,16 @@ function Verify({ onVerified }) {
   const [cooldown, setCooldown] = useState(0);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [channels, setChannels] = useState(null); // { sms, whatsapp } once the server has told us
+  const [channel, setChannel] = useState('sms');
+
+  useEffect(() => {
+    api.meta().then((m) => {
+      const c = m.otp_channels || { sms: true, whatsapp: false };
+      setChannels(c);
+      setChannel(c.sms ? 'sms' : 'whatsapp');
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -22,12 +32,14 @@ function Verify({ onVerified }) {
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
-  const sendCode = async (e) => {
-    e?.preventDefault();
+  const sendCode = async (e, forcedChannel) => {
+    e?.preventDefault?.();
+    const via = typeof forcedChannel === 'string' ? forcedChannel : channel;
     setError('');
     setBusy(true);
     try {
-      const res = await api.requestOtp(form);
+      const res = await api.requestOtp({ ...form, channel: via });
+      setChannel(via);
       setSent(res);
       setCode('');
       setCooldown(30);
@@ -68,7 +80,7 @@ function Verify({ onVerified }) {
         <form onSubmit={sendCode}>
           <h1>Verify yourself to report</h1>
           <p className="muted">
-            To keep complaints genuine, we confirm your mobile number with a one-time code sent by SMS before you can report a problem.
+            To keep complaints genuine, we confirm your mobile number with a one-time code sent to your phone before you can report a problem.
           </p>
           <label className="field">
             <span>Full name *</span>
@@ -93,22 +105,29 @@ function Verify({ onVerified }) {
                 placeholder="98765 43210"
               />
             </div>
-            <small className="hint">We will send a 6-digit code to this number by SMS.</small>
+            <small className="hint">We will send a 6-digit code to this number by {channel === 'whatsapp' ? 'WhatsApp' : 'SMS'}.</small>
           </label>
+          {channels?.sms && channels?.whatsapp && (
+            <div className="field">
+              <span>Send my code by</span>
+              <div className="channel-toggle" role="radiogroup" aria-label="How to receive the code">
+                <button type="button" role="radio" aria-checked={channel === 'sms'} className={channel === 'sms' ? 'on' : ''} onClick={() => setChannel('sms')}>💬 SMS</button>
+                <button type="button" role="radio" aria-checked={channel === 'whatsapp'} className={channel === 'whatsapp' ? 'on' : ''} onClick={() => setChannel('whatsapp')}>🟢 WhatsApp</button>
+              </div>
+            </div>
+          )}
+          {channels && !channels.sms && !channels.whatsapp && (
+            <p className="notice">Phone verification is not set up on this site yet. Please ask the administrator to add the SMS or WhatsApp settings.</p>
+          )}
           {error && <p className="error-text">{error}</p>}
-          <button className="btn primary wide" disabled={busy}>{busy ? 'Sending code…' : 'Send verification code'}</button>
+          <button className="btn primary wide" disabled={busy || (channels && !channels.sms && !channels.whatsapp)}>{busy ? 'Sending code…' : 'Send verification code'}</button>
         </form>
       ) : (
         <form onSubmit={confirm}>
           <h1>Enter the code</h1>
           <p className="muted">
-            We sent a 6-digit code by SMS to <strong>{maskContact(sent.contact)}</strong>. It is valid for 10 minutes.
+            We sent a 6-digit code by {sent.channel === 'whatsapp' ? 'WhatsApp' : 'SMS'} to <strong>{maskContact(sent.contact)}</strong>. It is valid for 10 minutes.
           </p>
-          {sent.delivery === 'console' && (
-            <p className="notice">
-              SMS sending is not set up on this server yet, so the code was printed in the server's terminal window (testing mode).
-            </p>
-          )}
           <label className="field">
             <span>Verification code</span>
             <input
@@ -127,10 +146,18 @@ function Verify({ onVerified }) {
           <button className="btn primary wide" disabled={busy || code.length !== 6}>{busy ? 'Checking…' : 'Verify and continue'}</button>
           <div className="row between otp-links">
             <button type="button" className="link" onClick={() => { setStep('details'); setError(''); }}>← Change details</button>
-            <button type="button" className="link" disabled={cooldown > 0 || busy} onClick={sendCode}>
+            <button type="button" className="link" disabled={cooldown > 0 || busy} onClick={() => sendCode(null, sent.channel)}>
               {cooldown > 0 ? `Resend code in ${cooldown}s` : 'Resend code'}
             </button>
           </div>
+          {channels?.sms && channels?.whatsapp && (
+            <p className="otp-links center">
+              Not getting it?{' '}
+              <button type="button" className="link" disabled={cooldown > 0 || busy} onClick={() => sendCode(null, sent.channel === 'sms' ? 'whatsapp' : 'sms')}>
+                Send it by {sent.channel === 'sms' ? 'WhatsApp' : 'SMS'} instead
+              </button>
+            </p>
+          )}
         </form>
       )}
     </section>
