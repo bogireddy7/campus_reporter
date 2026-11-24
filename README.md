@@ -37,6 +37,8 @@ The HOD and the Admin Office person each open **http://localhost:3001/admin/regi
 
 ## Settings (.env file)
 
+**Easiest way for phone verification:** run `npm run configure`. It asks for your SMS / WhatsApp key, saves it for you, and sends a test message to your phone.
+
 Settings go in a file called `.env` in the project folder, so you do not have to type them each time.
 
 1. Copy the example: `copy .env.example .env` (Windows) or `cp .env.example .env` (Mac/Linux)

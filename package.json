@@ -10,7 +10,8 @@
     "dev:client": "npm --prefix client run dev",
     "build": "npm --prefix client install --include=dev && npm --prefix client run build",
     "setup": "npm install && npm run build",
-    "test:sms": "node server/test-sms.js"
+    "test:sms": "node server/test-sms.js",
+    "configure": "node server/configure.js"
   },
   "engines": {
     "node": ">=22.13"
