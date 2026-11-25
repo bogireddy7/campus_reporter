@@ -5,7 +5,7 @@ import { api, mapLink, reporterSession, session } from '../api.js';
 const maskContact = (c) => `${c.slice(0, 3)} ${'•'.repeat(5)}${c.slice(-3)}`; // +91 •••••210
 
 /* ---------- Step 1 + 2: confirm who you are ---------- */
-const CHANNEL_LABEL = { sms: '💬 SMS', whatsapp: '🟢 WhatsApp', telegram: '✈️ Telegram (free)' };
+const CHANNEL_LABEL = { sms: '💬 SMS', telegram: '✈️ Telegram (free)' };
 
 function Verify({ onVerified }) {
   const [step, setStep] = useState('details'); // details | code | telegram
@@ -15,18 +15,18 @@ function Verify({ onVerified }) {
   const [cooldown, setCooldown] = useState(0);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [channels, setChannels] = useState(null); // { sms, whatsapp, telegram } once the server has told us
+  const [channels, setChannels] = useState(null); // { sms, telegram } once the server has told us
   const [channel, setChannel] = useState('sms');
   const [tg, setTg] = useState(null); // { token, link, bot }
   const [tgStatus, setTgStatus] = useState('pending');
 
-  const available = channels ? ['sms', 'whatsapp', 'telegram'].filter((c) => channels[c]) : [];
+  const available = channels ? ['sms', 'telegram'].filter((c) => channels[c]) : [];
 
   useEffect(() => {
     api.meta().then((m) => {
-      const c = m.otp_channels || { sms: true, whatsapp: false, telegram: false };
+      const c = m.otp_channels || { sms: true, telegram: false };
       setChannels(c);
-      setChannel(['sms', 'whatsapp', 'telegram'].find((x) => c[x]) || 'sms');
+      setChannel(['sms', 'telegram'].find((x) => c[x]) || 'sms');
     }).catch(() => {});
   }, []);
 
@@ -118,7 +118,7 @@ function Verify({ onVerified }) {
 
   const isTelegram = channel === 'telegram';
   const nothingSetUp = channels && available.length === 0;
-  const via = (c) => (c === 'whatsapp' ? 'WhatsApp' : 'SMS');
+  const via = (c) => 'SMS';
 
   return (
     <section className="card narrow">

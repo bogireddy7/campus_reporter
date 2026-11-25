@@ -28,11 +28,7 @@ const smsProvider = () => {
 };
 export const smsAvailable = () => Boolean(smsProvider());
 
-// WhatsApp (Meta WhatsApp Business Cloud API): needs an access token, the sending number's ID and an approved
-// "authentication" message template.
-export const whatsappAvailable = () =>
-  Boolean(process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_ID && process.env.WHATSAPP_TEMPLATE);
-export const otpChannels = () => ({ sms: smsAvailable(), whatsapp: whatsappAvailable() });
+export const otpChannels = () => ({ sms: smsAvailable() });
 
 async function sendFast2sms(phone, code) {
   const number = phone.slice(-10); // Fast2SMS wants the 10-digit number
@@ -65,41 +61,8 @@ async function sendTwilio(phone, code) {
   if (!res.ok) throw new Error(`Twilio returned HTTP ${res.status}`);
 }
 
-async function sendWhatsapp(phone, code) {
-  const base = process.env.WHATSAPP_API_URL || 'https://graph.facebook.com';
-  const version = process.env.WHATSAPP_API_VERSION || 'v23.0';
-  const res = await fetch(`${base}/${version}/${process.env.WHATSAPP_PHONE_ID}/messages`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`, 'content-type': 'application/json' },
-    body: JSON.stringify({
-      messaging_product: 'whatsapp',
-      to: phone.replace('+', ''), // WhatsApp wants digits only: 919876543210
-      type: 'template',
-      template: {
-        name: process.env.WHATSAPP_TEMPLATE,
-        language: { code: process.env.WHATSAPP_TEMPLATE_LANG || 'en_US' },
-        // Authentication templates carry the code in the message body and in the "copy code" button.
-        components: [
-          { type: 'body', parameters: [{ type: 'text', text: code }] },
-          { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: code }] },
-        ],
-      },
-    }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok || data.error) {
-    const e = data.error || {};
-    throw new Error(`WhatsApp rejected the message (HTTP ${res.status}): ${e.message ?? 'no details'}${e.code ? ` [code ${e.code}]` : ''}`);
-  }
-}
-
-/** Sends the code to the phone by SMS or WhatsApp. The code is never printed in the logs or returned by the API. */
-export async function deliver(phone, code, channel = 'sms') {
-  if (channel === 'whatsapp') {
-    if (!whatsappAvailable()) throw new Error('WhatsApp is not configured');
-    await sendWhatsapp(phone, code);
-    return 'whatsapp';
-  }
+/** Sends the code to the phone by SMS. The code is never printed in the logs or returned by the API. */
+export async function deliver(phone, code) {
   const provider = smsProvider();
   if (provider === 'fast2sms') await sendFast2sms(phone, code);
   else if (provider === 'twilio') await sendTwilio(phone, code);
@@ -117,14 +80,9 @@ function underDailyCap() {
 }
 
 // ---------- public API used by the routes ----------
-export async function requestOtp({ name, rollNo, contact, channel }) {
-  const channels = otpChannels();
-  if (!channels.sms && !channels.whatsapp) {
-    return { error: 'Phone verification is not set up on this site yet. The administrator needs to add the SMS or WhatsApp settings.', status: 503 };
-  }
-  const via = channel === 'sms' || channel === 'whatsapp' ? channel : channels.sms ? 'sms' : 'whatsapp';
-  if (!channels[via]) {
-    return { error: `${via === 'sms' ? 'SMS' : 'WhatsApp'} codes are not available on this site. Please choose the other option.`, status: 400 };
+export async function requestOtp({ name, rollNo, contact }) {
+  if (!smsAvailable()) {
+    return { error: 'SMS codes are not set up on this site. Please verify with Telegram instead.', status: 503 };
   }
   const now = Date.now();
   const recent = db
@@ -144,15 +102,10 @@ export async function requestOtp({ name, rollNo, contact, channel }) {
   const code = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
   let delivery;
   try {
-    delivery = await deliver(contact.value, code, via);
+    delivery = await deliver(contact.value, code);
   } catch (err) {
     console.error('OTP delivery failed:', err.message);
-    return {
-      error: via === 'whatsapp'
-        ? 'Could not send the WhatsApp message. Check that this number is on WhatsApp and try again in a minute, or choose SMS.'
-        : 'Could not send the SMS. Please check the number and try again in a minute.',
-      status: 502,
-    };
+    return { error: 'Could not send the SMS. Please check the number and try again in a minute.', status: 502 };
   }
   smsToday++;
 

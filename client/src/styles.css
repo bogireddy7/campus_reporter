@@ -248,7 +248,7 @@ legend { padding: 0 6px; font-weight: 600; font-size: .9rem; }
 .map-fallback li { display: flex; justify-content: space-between; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); flex-wrap: wrap; }
 .map-popup-actions { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
 
-/* SMS / WhatsApp choice */
+/* SMS / Telegram choice */
 .channel-toggle { display: inline-flex; background: var(--brand-soft); border-radius: 12px; padding: 4px; gap: 4px; }
 .channel-toggle button { border: 0; background: transparent; padding: 8px 18px; border-radius: 9px; font: inherit; font-weight: 600; color: var(--info); cursor: pointer; }
 .channel-toggle button.on { background: #fff; color: var(--brand); box-shadow: 0 1px 4px rgba(40, 36, 110, .18); }

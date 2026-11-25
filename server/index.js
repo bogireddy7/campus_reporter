@@ -407,9 +407,9 @@ app.listen(PORT, () => {
   console.log(`Campus Reporter running on http://localhost:${PORT}`);
   console.log(`Staff registration code: ${STAFF_CODE}  (give it only to the HOD and Admin Office)`);
   const ch = otpChannels();
-  console.log(`SMS codes: ${ch.sms ? 'ON' : 'off (add FAST2SMS_API_KEY)'}   |   WhatsApp codes: ${ch.whatsapp ? 'ON' : 'off (add WHATSAPP_* settings)'}`);
+  console.log(`SMS codes: ${ch.sms ? 'ON' : 'off (add FAST2SMS_API_KEY)'}`);
   startTelegram().then(() => {
-    if (!ch.sms && !ch.whatsapp && !telegramReady()) {
+    if (!ch.sms && !telegramReady()) {
       console.log('WARNING: no way to verify phone numbers is set up, so reporters cannot verify. Run "npm run configure" (Telegram is free).');
     }
   });

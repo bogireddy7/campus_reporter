@@ -1,5 +1,5 @@
 // Guided setup for phone verification:   npm run configure
-// Asks for your SMS / WhatsApp keys, saves them in the ".env" file, and sends a test message to your phone.
+// Asks for your SMS keys, saves them in the ".env" file, and sends a test message to your phone.
 import './env.js';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -43,14 +43,13 @@ const keep = (name) => (process.env[name] ? ` (already set, press Enter to keep 
 
 console.log('\n=== Phone verification setup ===\n');
 console.log('Reporters must confirm their mobile number before they can report a problem.');
-console.log('Telegram is FREE for unlimited students. SMS and WhatsApp cost money.\n');
+console.log('Telegram is FREE for unlimited students. SMS costs money.\n');
 const yes = async (q, def) => {
   const a = (await ask(`${q} [${def ? 'Y/n' : 'y/N'}]: `)).toLowerCase();
   return a ? a.startsWith('y') : def;
 };
 const wantTg = await yes('Use Telegram (free)?', true);
 const wantSms = await yes('Also use SMS (Fast2SMS, paid)?', false);
-const wantWa = await yes('Also use WhatsApp (Meta)?', false);
 const updates = {};
 
 if (wantTg) {
@@ -76,20 +75,6 @@ if (wantSms) {
   if (key && /\s/.test(key)) console.log('That key has spaces in it, so it was ignored. Copy only the key itself.');
   else if (key) updates.FAST2SMS_API_KEY = key;
 }
-if (wantWa) {
-  console.log('\n--- WhatsApp ---');
-  console.log('From developers.facebook.com -> your app -> WhatsApp -> API Setup (see the README for the steps).');
-  const token = await ask(`Access token${keep('WHATSAPP_TOKEN')}: `);
-  const phoneId = await ask(`Phone number ID${keep('WHATSAPP_PHONE_ID')}: `);
-  const template = await ask(`Approved Authentication template name${keep('WHATSAPP_TEMPLATE')} [campus_otp]: `);
-  const lang = await ask('Template language exactly as in WhatsApp Manager [en_US]: ');
-  if (token && !/\s/.test(token)) updates.WHATSAPP_TOKEN = token;
-  if (phoneId && /^\d+$/.test(phoneId)) updates.WHATSAPP_PHONE_ID = phoneId;
-  else if (phoneId) console.log('The Phone number ID should be digits only, so it was ignored.');
-  if (template || !process.env.WHATSAPP_TEMPLATE) updates.WHATSAPP_TEMPLATE = template || 'campus_otp';
-  if (lang || !process.env.WHATSAPP_TEMPLATE_LANG) updates.WHATSAPP_TEMPLATE_LANG = lang || 'en_US';
-}
-
 if (Object.keys(updates).length) {
   saveEnv(updates);
   console.log(`\nSaved to ${envPath}`);
@@ -97,7 +82,7 @@ if (Object.keys(updates).length) {
 
 const channels = otpChannels();
 const tgOn = Boolean(process.env.TELEGRAM_BOT_TOKEN);
-if (!channels.sms && !channels.whatsapp) {
+if (!channels.sms) {
   if (tgOn) {
     console.log('\nDone. Now run:  npm start     (look for "Telegram verification: ON (free)")\n');
     process.exit(0);
@@ -109,20 +94,19 @@ if (!channels.sms && !channels.whatsapp) {
 const number = parseContact(await ask('\nYour own mobile number, to send a test message now (10 digits, or Enter to skip): '));
 let failed = false;
 if (number) {
-  for (const channel of ['sms', 'whatsapp']) {
-    if (!channels[channel]) continue;
+  if (channels.sms) {
     try {
-      await deliver(number.value, String(100000 + Math.floor(Math.random() * 900000)), channel);
-      console.log(`  ${channel === 'sms' ? 'SMS' : 'WhatsApp'}: sent. Check your phone in a few seconds.`);
+      await deliver(number.value, String(100000 + Math.floor(Math.random() * 900000)));
+      console.log(`  SMS: sent. Check your phone in a few seconds.`);
     } catch (err) {
       failed = true;
-      console.log(`  ${channel === 'sms' ? 'SMS' : 'WhatsApp'}: FAILED. ${err.message}`);
+      console.log(`  SMS: FAILED. ${err.message}`);
     }
   }
 }
 console.log(
   failed
     ? '\nThe settings are saved, but the test failed. Copy the FAILED line above and send it to me, or check the key.\n'
-    : '\nDone. Now run:  npm start     (look for "SMS codes: ON" or "WhatsApp codes: ON")\n'
+    : '\nDone. Now run:  npm start     (look for "SMS codes: ON")\n'
 );
 process.exit(failed ? 1 : 0);
