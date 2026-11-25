@@ -22,22 +22,6 @@ export const session = {
   },
 };
 
-// A reporter proves their email / phone with an OTP and gets a short-lived token (kept per browser tab).
-const REPORTER_KEY = 'cr_reporter';
-export const reporterSession = {
-  get() {
-    try {
-      const data = JSON.parse(sessionStorage.getItem(REPORTER_KEY) || 'null');
-      if (!data) return null;
-      const exp = JSON.parse(atob(data.token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).exp * 1000;
-      if (Date.now() > exp) { sessionStorage.removeItem(REPORTER_KEY); return null; }
-      return data; // { token, reporter }
-    } catch { return null; }
-  },
-  save(data) { try { sessionStorage.setItem(REPORTER_KEY, JSON.stringify(data)); } catch { /* storage unavailable */ } },
-  clear() { try { sessionStorage.removeItem(REPORTER_KEY); } catch { /* storage unavailable */ } },
-};
-
 async function request(path, { method = 'GET', body, form, token } = {}) {
   const headers = {};
   const bearer = token ?? session.token;
@@ -55,9 +39,6 @@ async function request(path, { method = 'GET', body, form, token } = {}) {
       if (bearer && bearer === session.token) {
         session.clear(); // a staff session ended
         window.dispatchEvent(new Event('cr-logout'));
-      } else if (token) {
-        reporterSession.clear(); // a reporter's OTP verification ended
-        window.dispatchEvent(new Event('cr-reporter-expired'));
       }
     }
     throw new Error(data.error || 'Request failed');
@@ -67,10 +48,6 @@ async function request(path, { method = 'GET', body, form, token } = {}) {
 
 export const api = {
   meta: () => request('/api/meta'),
-  requestOtp: (body) => request('/api/otp/request', { method: 'POST', body, token: '' }),
-  verifyOtp: (body) => request('/api/otp/verify', { method: 'POST', body, token: '' }),
-  telegramStart: (body) => request('/api/telegram/start', { method: 'POST', body, token: '' }),
-  telegramStatus: (token) => request(`/api/telegram/status/${encodeURIComponent(token)}`, { token: '' }),
   submitIssue: (form, token) => request('/api/issues', { method: 'POST', form, token }),
   track: (tid) => request(`/api/track/${encodeURIComponent(tid)}`),
   register: (body) => request('/api/auth/register', { method: 'POST', body }),

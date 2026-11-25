@@ -9,8 +9,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { db } from './db.js';
-import { otpChannels, parseContact, requestOtp, verifyOtp } from './otp.js';
-import { botName, checkVerification, createVerification, startTelegram, telegramReady } from './telegram.js';
+import { parseContact } from './phone.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3001;
@@ -99,30 +98,19 @@ function auth(req, res, next) {
   }
 }
 
-// Reporters must verify their mobile number with an SMS OTP before they can submit a complaint.
-// Logged-in staff (HOD / Admin Office) are already authenticated, so they can report without an OTP.
-function reporterAuth(req, res, next) {
+// Anyone can report by giving their name, roll number and mobile number. A logged-in HOD / Admin Office
+// person is recognised from their login instead, so they do not have to type anything.
+function reporterFrom(req) {
   const header = req.headers.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
-  if (!token) return res.status(401).json({ error: 'Please verify your mobile number first' });
+  if (!token) return null;
   try {
     const payload = jwt.verify(token, JWT_SECRET);
-    if (payload.kind === 'reporter') {
-      req.reporter = payload;
-    } else if (['hod', 'office'].includes(payload.role)) {
-      req.reporter = {
-        name: payload.name,
-        roll_no: payload.role === 'hod' ? 'HOD' : 'Admin Office',
-        contact: payload.email,
-        contact_type: 'email',
-      };
-    } else {
-      throw new Error('unknown token');
+    if (['hod', 'office'].includes(payload.role)) {
+      return { name: payload.name, roll_no: payload.role === 'hod' ? 'HOD' : 'Admin Office', contact: payload.email, contact_type: 'email', staff: true };
     }
-    next();
-  } catch {
-    res.status(401).json({ error: 'Your session has expired. Please verify again.' });
-  }
+  } catch { /* fall through to the form details */ }
+  return null;
 }
 
 // Simple in-memory limiter (slows down password and code guessing). perPath: count each URL separately.
@@ -139,7 +127,6 @@ const makeLimit = (max, perPath = true) => (req, res, next) => {
   next();
 };
 const authLimit = makeLimit(15);
-const pollLimit = makeLimit(1500, false); // the website checks the Telegram result every 2 seconds
 
 const clean = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 const num = (v) => {
@@ -150,65 +137,26 @@ const num = (v) => {
 // ---------- public routes ----------
 app.get('/healthz', (_req, res) => res.send('ok'));
 app.get('/api/meta', (_req, res) =>
-  res.json({ categories: CATEGORIES, priorities: PRIORITIES, statuses: STATUSES, maps_key: process.env.GOOGLE_MAPS_API_KEY || '', otp_channels: { ...otpChannels(), telegram: telegramReady() } })
+  res.json({ categories: CATEGORIES, priorities: PRIORITIES, statuses: STATUSES, maps_key: process.env.GOOGLE_MAPS_API_KEY || '' })
 );
 
-// Step 1: ask for a code (sent by SMS to the mobile number the reporter gave).
-app.post('/api/otp/request', authLimit, async (req, res) => {
-  const name = clean(req.body.name, 80);
-  const rollNo = clean(req.body.roll_no, 40);
-  const contact = parseContact(req.body.contact);
-  if (!name) return res.status(400).json({ error: 'Please enter your name' });
-  if (!rollNo) return res.status(400).json({ error: 'Please enter your roll number / staff ID' });
-  if (!contact) return res.status(400).json({ error: 'Enter a valid 10-digit Indian mobile number' });
+const submitLimit = makeLimit(20); // stops one device from flooding the dashboards
 
-  let result;
-  try {
-    result = await requestOtp({ name, rollNo, contact, channel: req.body.channel });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: 'Something went wrong. Please try again.' });
-  }
-  if (result.error) return res.status(result.status).json({ error: result.error });
-  res.json({ ok: true, contact: contact.value, contact_type: contact.type, delivery: result.delivery, channel: result.delivery });
-});
-
-// Step 2: confirm the code. Returns a short-lived token that allows submitting complaints.
-app.post('/api/otp/verify', authLimit, (req, res) => {
-  const contact = parseContact(req.body.contact);
-  if (!contact) return res.status(400).json({ error: 'Enter a valid 10-digit Indian mobile number' });
-  const result = verifyOtp({ contact, code: req.body.code });
-  if (result.error) return res.status(result.status).json({ error: result.error });
-
-  const reporter = { name: result.name, roll_no: result.rollNo, contact: contact.value, contact_type: result.contactType };
-  const token = jwt.sign({ kind: 'reporter', ...reporter }, JWT_SECRET, { expiresIn: '60m' });
-  res.json({ token, reporter });
-});
-
-// ----- Free verification with Telegram: the student shares their phone number with our bot -----
-app.post('/api/telegram/start', authLimit, (req, res) => {
-  if (!telegramReady()) return res.status(503).json({ error: 'Telegram verification is not set up on this site yet.' });
-  const name = clean(req.body.name, 80);
-  const rollNo = clean(req.body.roll_no, 40);
-  if (!name) return res.status(400).json({ error: 'Please enter your name' });
-  if (!rollNo) return res.status(400).json({ error: 'Please enter your roll number / staff ID' });
-  const token = createVerification({ name, rollNo });
-  res.json({ token, bot: botName(), link: `https://t.me/${botName()}?start=${token}`, expires_in: 600 });
-});
-
-app.get('/api/telegram/status/:token', pollLimit, (req, res) => {
-  const result = checkVerification(clean(req.params.token, 64));
-  if (result.status !== 'verified') return res.json({ status: result.status });
-  const reporter = { name: result.name, roll_no: result.rollNo, contact: result.phone, contact_type: 'phone' };
-  const token = jwt.sign({ kind: 'reporter', ...reporter }, JWT_SECRET, { expiresIn: '60m' });
-  res.json({ status: 'verified', token, reporter });
-});
-
-app.post('/api/issues', reporterAuth, (req, res) => {
+app.post('/api/issues', submitLimit, (req, res) => {
   upload.single('photo')(req, res, (err) => {
     if (err) return res.status(400).json({ error: err.message });
 
-    const reporter = req.reporter; // verified details come from the token, not from the form
+    let reporter = reporterFrom(req);
+    if (!reporter) {
+      const name = clean(req.body.reporter_name, 80);
+      const rollNo = clean(req.body.reporter_roll, 40);
+      const phone = parseContact(req.body.reporter_phone);
+      if (!name || !rollNo || !phone) {
+        if (req.file) fs.unlink(req.file.path, () => {});
+        return res.status(400).json({ error: 'Please enter your name, roll number and a valid 10-digit mobile number' });
+      }
+      reporter = { name, roll_no: rollNo, contact: phone.value, contact_type: 'phone' };
+    }
     const title = clean(req.body.title, 120);
     const description = clean(req.body.description, 2000);
     const category = CATEGORIES.includes(req.body.category) ? req.body.category : 'Other';
@@ -240,12 +188,12 @@ app.post('/api/issues', reporterAuth, (req, res) => {
         `INSERT INTO issues
          (tracking_id, title, description, category, category_other, priority, location_text, lat, lng, photo,
           reporter_name, reporter_id, reporter_contact, reporter_contact_type, reporter_verified)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         tid, title, description, category, categoryOther || null, priority,
         clean(req.body.location_text, 200) || null, lat, lng, req.file.filename,
-        reporter.name, reporter.roll_no, reporter.contact, reporter.contact_type
+        reporter.name, reporter.roll_no, reporter.contact, reporter.contact_type, reporter.staff ? 1 : 0
       );
 
     db.prepare('INSERT INTO updates (issue_id, author, status, note) VALUES (?, ?, ?, ?)').run(
@@ -406,12 +354,5 @@ app.use((err, _req, res, _next) => {
 app.listen(PORT, () => {
   console.log(`Campus Reporter running on http://localhost:${PORT}`);
   console.log(`Staff registration code: ${STAFF_CODE}  (give it only to the HOD and Admin Office)`);
-  const ch = otpChannels();
-  console.log(`SMS codes: ${ch.sms ? 'ON' : 'off (add FAST2SMS_API_KEY)'}`);
-  startTelegram().then(() => {
-    if (!ch.sms && !telegramReady()) {
-      console.log('WARNING: no way to verify phone numbers is set up, so reporters cannot verify. Run "npm run configure" (Telegram is free).');
-    }
-  });
   if (!process.env.GOOGLE_MAPS_API_KEY) console.log('Google Maps: no GOOGLE_MAPS_API_KEY, the dashboard map shows a list with Navigate links instead.');
 });

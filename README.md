@@ -4,15 +4,14 @@ A college community issue-reporting system. Anyone on campus can report a proble
 
 ## Features
 
-- **Verified reporting**: before reporting, a person enters their name, roll no. / staff ID and their mobile number, then confirms their number. This is free with a Telegram bot (the student taps "Share my phone number"), or with a 6-digit code sent by SMS (paid). Only then can they submit a complaint
+- **Simple reporting**: anyone on campus enters their name, roll no. / staff ID and mobile number, adds a photo and a description, and submits. No login and no codes. Logged-in HOD / Admin Office staff do not need to type their details
 - **Report form**: camera/photo upload, category (choose **Other** and type your own name for the problem), urgency, description, "Tag my current location" (browser GPS) plus a typed place name
 - **Tracking ID** (e.g. `CR-3M8H2F`) so reporters can check progress without an account (contact details are never shown on the public page)
 - **Staff create their own accounts** (HOD, Admin Office) using a staff access code, then share one dashboard: stats, filters (status / category / priority / search), urgent issues sorted first, auto-refresh every 30 s
 - **Map view**: the dashboard has a List / Map toggle that shows every geo-tagged complaint as a coloured pin (by priority) on **Google Maps**, with a **Navigate** button that opens Google Maps directions to the spot
 - **Delete reports**: the HOD and Admin Office can delete a report (trash icon on the list, or inside the report). The photo and history are removed too
-- **Staff skip verification**: when the HOD or Admin Office is logged in, they can report a problem directly without an OTP
 - **Issue detail**: full photo, description, reporter details, map link for the GPS tag, status + priority update with a note, full history
-- Photo type/size validation (JPG/PNG/WebP, 6 MB), JWT login, hashed passwords, rate-limited login/sign-up/OTP (codes are hashed, expire in 10 minutes, work once, lock after 5 wrong tries)
+- Photo type/size validation (JPG/PNG/WebP, 6 MB), JWT login, hashed passwords, rate-limited login, sign-up and report submission
 
 ## Run it
 
@@ -37,38 +36,13 @@ The HOD and the Admin Office person each open **http://localhost:3001/admin/regi
 
 ## Settings (.env file)
 
-**Easiest way for phone verification:** run `npm run configure`. It asks for your Telegram bot token (free), and optionally SMS keys, saves it for you, and sends a test message to your phone.
-
 Settings go in a file called `.env` in the project folder, so you do not have to type them each time.
 
 1. Copy the example: `copy .env.example .env` (Windows) or `cp .env.example .env` (Mac/Linux)
 2. Open `.env` in Notepad / VS Code and fill in the values (see below).
-3. Restart with `npm start`. The start-up messages tell you whether SMS and Google Maps are switched on.
+3. Restart with `npm start`. The start-up messages tell you whether Google Maps is switched on.
 
 `.env` is never uploaded to GitHub, so your keys stay private.
-
-### Free phone verification with Telegram (recommended)
-
-No money, no SMS provider, unlimited students. The student opens a Telegram link, presses **Start**, and taps **Share my phone number**. Telegram itself confirms that number belongs to that account, and the website continues automatically.
-
-1. In Telegram, chat with **@BotFather**, send `/newbot`, choose a name and a username ending in `bot`. Copy the token it gives you.
-2. Run `npm run configure`, answer **Y** to Telegram and paste the token (or put `TELEGRAM_BOT_TOKEN=...` in `.env`).
-3. `npm start`. You should see `Telegram verification: ON (free)`.
-
-Good to know:
-- Only Indian (+91) numbers are accepted, and the number must be the Telegram account's own (a forwarded contact is refused).
-- The server asks Telegram for new messages continuously, so the site must be running all the time, and **only one copy** of the site may use a given bot token. Use a separate bot for testing on your own computer.
-- Students need the Telegram app (free) on their phone.
-
-### SMS one-time codes (optional, paid)
-
-Reporters verify with their **mobile number** (Indian numbers). The 6-digit code is sent **to their phone by SMS**. It is never shown on the screen or in the terminal, so until Telegram, SMS is set up reporters cannot verify.
-
-1. Create a [Fast2SMS](https://www.fast2sms.com) account, copy your API key from **Dev API**, and add some money to the wallet.
-2. Put it in `.env`: `FAST2SMS_API_KEY=your-key`
-3. Check it works: `npm run test:sms 9876543210` (use your own number). A test SMS should arrive.
-
-Optional: `FAST2SMS_ROUTE=q` uses Fast2SMS "Quick SMS" instead of the default `otp` route (check which is enabled / cheaper in your dashboard). `SMS_DAILY_LIMIT=300` caps the SMS the whole site can send per day. Twilio also works (`TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM`). Per-number limits: 1 code per 30 s and 5 per hour.
 
 ### Google Maps (dashboard map)
 
@@ -99,6 +73,7 @@ npm run dev:client   # Vite on :5173, proxies /api and /uploads
 
 ## Ideas for next steps
 
+- Optional phone verification (OTP) to stop fake reports
 - Email/SMS notification to the reporter when status changes
 - Route categories automatically (e.g. academic → HOD, infrastructure → Office)
 - Password reset / change screen

@@ -107,7 +107,7 @@ function Detail({ id, onClose, onChanged, onDelete }) {
               <dd>
                 {issue.reporter_name}
                 {issue.reporter_id ? ` (${issue.reporter_id})` : ''}
-                {issue.reporter_contact && <><br />{issue.reporter_contact}{issue.reporter_verified ? <span className="vtag">{issue.reporter_contact_type === 'email' ? '✓ staff' : '✓ verified mobile'}</span> : null}</>}
+                {issue.reporter_contact && <><br />{issue.reporter_contact}{issue.reporter_verified ? <span className="vtag">✓ staff</span> : null}</>}
               </dd>
               <dt>Reported</dt>
               <dd>{formatDate(issue.created_at)}</dd>
