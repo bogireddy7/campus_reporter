@@ -24,6 +24,8 @@ services:
         generateValue: true
       - key: STAFF_CODE        # the code the HOD / Admin Office use to create their accounts
         sync: false
+      - key: TELEGRAM_BOT_TOKEN  # free phone verification (BotFather -> /newbot)
+        sync: false
       - key: FAST2SMS_API_KEY  # SMS OTP (Fast2SMS dashboard -> Dev API)
         sync: false
       - key: FAST2SMS_ROUTE    # 'otp' (default) or 'q' for Quick SMS

@@ -61,6 +61,18 @@ db.exec(`
     created_at INTEGER NOT NULL
   );
 
+  -- Free phone verification through a Telegram bot (the student shares their number with the bot).
+  CREATE TABLE IF NOT EXISTS telegram_verifications (
+    token TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    roll_no TEXT NOT NULL,
+    chat_id INTEGER,
+    phone TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL
+  );
+
   -- Who deleted which report and when (the report itself is removed for good).
   CREATE TABLE IF NOT EXISTS deletions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

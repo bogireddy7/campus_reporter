@@ -6,6 +6,7 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { deliver, otpChannels, parseContact } from './otp.js';
+import { checkBotToken } from './telegram.js';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const envPath = process.env.ENV_FILE || path.join(root, '.env');
@@ -41,13 +42,33 @@ function saveEnv(updates) {
 const keep = (name) => (process.env[name] ? ` (already set, press Enter to keep it)` : '');
 
 console.log('\n=== Phone verification setup ===\n');
-console.log('Reporters must confirm their mobile number with a code sent to their phone.');
-console.log('Which should the site use?\n  1) SMS (Fast2SMS)\n  2) WhatsApp (Meta)\n  3) Both\n');
-const choice = (await ask('Type 1, 2 or 3 [1]: ')) || '1';
-const wantSms = choice === '1' || choice === '3';
-const wantWa = choice === '2' || choice === '3';
+console.log('Reporters must confirm their mobile number before they can report a problem.');
+console.log('Telegram is FREE for unlimited students. SMS and WhatsApp cost money.\n');
+const yes = async (q, def) => {
+  const a = (await ask(`${q} [${def ? 'Y/n' : 'y/N'}]: `)).toLowerCase();
+  return a ? a.startsWith('y') : def;
+};
+const wantTg = await yes('Use Telegram (free)?', true);
+const wantSms = await yes('Also use SMS (Fast2SMS, paid)?', false);
+const wantWa = await yes('Also use WhatsApp (Meta)?', false);
 const updates = {};
 
+if (wantTg) {
+  console.log('\n--- Telegram (free) ---');
+  console.log('1. Open Telegram and chat with @BotFather   2. Send /newbot   3. Pick a name and a username ending in "bot"');
+  console.log('4. BotFather replies with a token like 123456789:ABC...  Copy it.');
+  const token = await ask(`Paste the bot token${keep('TELEGRAM_BOT_TOKEN')}: `);
+  if (token && /\s/.test(token)) console.log('That token has spaces in it, so it was ignored. Copy only the token itself.');
+  else if (token) {
+    try {
+      const username = await checkBotToken(token);
+      updates.TELEGRAM_BOT_TOKEN = token;
+      console.log(`  Token works. Your bot is @${username}`);
+    } catch (err) {
+      console.log(`  Telegram did not accept that token (${err.message}). It was not saved.`);
+    }
+  }
+}
 if (wantSms) {
   console.log('\n--- SMS ---');
   console.log('Get your key: fast2sms.com -> log in -> Dev API -> copy the API key. (Add money to the wallet.)');
@@ -75,7 +96,12 @@ if (Object.keys(updates).length) {
 }
 
 const channels = otpChannels();
+const tgOn = Boolean(process.env.TELEGRAM_BOT_TOKEN);
 if (!channels.sms && !channels.whatsapp) {
+  if (tgOn) {
+    console.log('\nDone. Now run:  npm start     (look for "Telegram verification: ON (free)")\n');
+    process.exit(0);
+  }
   console.log('\nNothing is set up yet, so reporters still cannot verify. Run "npm run configure" again when you have your key.');
   process.exit(0);
 }

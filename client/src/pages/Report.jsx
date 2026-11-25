@@ -5,22 +5,28 @@ import { api, mapLink, reporterSession, session } from '../api.js';
 const maskContact = (c) => `${c.slice(0, 3)} ${'•'.repeat(5)}${c.slice(-3)}`; // +91 •••••210
 
 /* ---------- Step 1 + 2: confirm who you are ---------- */
+const CHANNEL_LABEL = { sms: '💬 SMS', whatsapp: '🟢 WhatsApp', telegram: '✈️ Telegram (free)' };
+
 function Verify({ onVerified }) {
-  const [step, setStep] = useState('details'); // details | code
+  const [step, setStep] = useState('details'); // details | code | telegram
   const [form, setForm] = useState({ name: '', roll_no: '', contact: '' });
   const [code, setCode] = useState('');
-  const [sent, setSent] = useState(null); // { contact, contact_type, delivery }
+  const [sent, setSent] = useState(null); // { contact, contact_type, channel }
   const [cooldown, setCooldown] = useState(0);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [channels, setChannels] = useState(null); // { sms, whatsapp } once the server has told us
+  const [channels, setChannels] = useState(null); // { sms, whatsapp, telegram } once the server has told us
   const [channel, setChannel] = useState('sms');
+  const [tg, setTg] = useState(null); // { token, link, bot }
+  const [tgStatus, setTgStatus] = useState('pending');
+
+  const available = channels ? ['sms', 'whatsapp', 'telegram'].filter((c) => channels[c]) : [];
 
   useEffect(() => {
     api.meta().then((m) => {
-      const c = m.otp_channels || { sms: true, whatsapp: false };
+      const c = m.otp_channels || { sms: true, whatsapp: false, telegram: false };
       setChannels(c);
-      setChannel(c.sms ? 'sms' : 'whatsapp');
+      setChannel(['sms', 'whatsapp', 'telegram'].find((x) => c[x]) || 'sms');
     }).catch(() => {});
   }, []);
 
@@ -30,11 +36,55 @@ function Verify({ onVerified }) {
     return () => clearTimeout(t);
   }, [cooldown]);
 
+  // Telegram: the website keeps asking the server whether the student has shared their number with the bot.
+  useEffect(() => {
+    if (step !== 'telegram' || !tg) return undefined;
+    let stop = false;
+    let timer;
+    const tick = async () => {
+      try {
+        const r = await api.telegramStatus(tg.token);
+        if (stop) return;
+        if (r.status === 'verified') {
+          const data = { token: r.token, reporter: r.reporter };
+          reporterSession.save(data);
+          onVerified(data);
+          return;
+        }
+        if (['expired', 'unknown', 'used'].includes(r.status)) {
+          setError('This verification link expired. Please start again.');
+          setStep('details');
+          return;
+        }
+        setTgStatus(r.status);
+      } catch { /* network hiccup: try again on the next tick */ }
+      if (!stop) timer = setTimeout(tick, 2000);
+    };
+    timer = setTimeout(tick, 1500);
+    return () => { stop = true; clearTimeout(timer); };
+  }, [step, tg]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const startTelegram = async () => {
+    setError('');
+    setBusy(true);
+    try {
+      const res = await api.telegramStart({ name: form.name, roll_no: form.roll_no });
+      setTg(res);
+      setTgStatus('pending');
+      setStep('telegram');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const sendCode = async (e, forcedChannel) => {
     e?.preventDefault?.();
     const via = typeof forcedChannel === 'string' ? forcedChannel : channel;
+    if (via === 'telegram') return startTelegram();
     setError('');
     setBusy(true);
     try {
@@ -66,21 +116,25 @@ function Verify({ onVerified }) {
     }
   };
 
+  const isTelegram = channel === 'telegram';
+  const nothingSetUp = channels && available.length === 0;
+  const via = (c) => (c === 'whatsapp' ? 'WhatsApp' : 'SMS');
+
   return (
     <section className="card narrow">
       <div className="steps">
         <span className={`step ${step === 'details' ? 'on' : 'done'}`}><b>1</b> Your details</span>
         <span className="step-line" />
-        <span className={`step ${step === 'code' ? 'on' : ''}`}><b>2</b> Confirm code</span>
+        <span className={`step ${step !== 'details' ? 'on' : ''}`}><b>2</b> Confirm</span>
         <span className="step-line" />
         <span className="step"><b>3</b> Report</span>
       </div>
 
-      {step === 'details' ? (
+      {step === 'details' && (
         <form onSubmit={sendCode}>
           <h1>Verify yourself to report</h1>
           <p className="muted">
-            To keep complaints genuine, we confirm your mobile number with a one-time code sent to your phone before you can report a problem.
+            To keep complaints genuine, we confirm your mobile number before you can report a problem.
           </p>
           <label className="field">
             <span>Full name *</span>
@@ -90,43 +144,80 @@ function Verify({ onVerified }) {
             <span>Roll number / Staff ID *</span>
             <input value={form.roll_no} onChange={set('roll_no')} maxLength={40} required />
           </label>
-          <label className="field">
-            <span>Mobile number *</span>
-            <div className="phone-input">
-              <span className="phone-prefix">+91</span>
-              <input
-                value={form.contact}
-                onChange={(e) => setForm((f) => ({ ...f, contact: e.target.value.replace(/[^\d+\s-]/g, '') }))}
-                maxLength={16}
-                required
-                type="tel"
-                inputMode="tel"
-                autoComplete="tel"
-                placeholder="98765 43210"
-              />
-            </div>
-            <small className="hint">We will send a 6-digit code to this number by {channel === 'whatsapp' ? 'WhatsApp' : 'SMS'}.</small>
-          </label>
-          {channels?.sms && channels?.whatsapp && (
+          {!isTelegram && (
+            <label className="field">
+              <span>Mobile number *</span>
+              <div className="phone-input">
+                <span className="phone-prefix">+91</span>
+                <input
+                  value={form.contact}
+                  onChange={(e) => setForm((f) => ({ ...f, contact: e.target.value.replace(/[^\d+\s-]/g, '') }))}
+                  maxLength={16}
+                  required
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  placeholder="98765 43210"
+                />
+              </div>
+              <small className="hint">We will send a 6-digit code to this number by {via(channel)}.</small>
+            </label>
+          )}
+          {available.length > 1 && (
             <div className="field">
-              <span>Send my code by</span>
-              <div className="channel-toggle" role="radiogroup" aria-label="How to receive the code">
-                <button type="button" role="radio" aria-checked={channel === 'sms'} className={channel === 'sms' ? 'on' : ''} onClick={() => setChannel('sms')}>💬 SMS</button>
-                <button type="button" role="radio" aria-checked={channel === 'whatsapp'} className={channel === 'whatsapp' ? 'on' : ''} onClick={() => setChannel('whatsapp')}>🟢 WhatsApp</button>
+              <span>Confirm my number with</span>
+              <div className="channel-toggle" role="radiogroup" aria-label="How to confirm your number">
+                {available.map((c) => (
+                  <button key={c} type="button" role="radio" aria-checked={channel === c} className={channel === c ? 'on' : ''} onClick={() => setChannel(c)}>
+                    {CHANNEL_LABEL[c]}
+                  </button>
+                ))}
               </div>
             </div>
           )}
-          {channels && !channels.sms && !channels.whatsapp && (
-            <p className="notice">Phone verification is not set up on this site yet. Please ask the administrator to add the SMS or WhatsApp settings.</p>
+          {isTelegram && (
+            <p className="notice">
+              Telegram confirms your mobile number for us, free. You will open Telegram once, press <strong>Start</strong> and tap <strong>Share my phone number</strong>.
+            </p>
+          )}
+          {nothingSetUp && (
+            <p className="notice">Phone verification is not set up on this site yet. Please ask the administrator to set it up (Telegram is free).</p>
           )}
           {error && <p className="error-text">{error}</p>}
-          <button className="btn primary wide" disabled={busy || (channels && !channels.sms && !channels.whatsapp)}>{busy ? 'Sending code…' : 'Send verification code'}</button>
+          <button className="btn primary wide" disabled={busy || nothingSetUp}>
+            {busy ? 'Please wait…' : isTelegram ? 'Continue with Telegram' : 'Send verification code'}
+          </button>
         </form>
-      ) : (
+      )}
+
+      {step === 'telegram' && tg && (
+        <div>
+          <h1>Verify with Telegram</h1>
+          <p className="muted">Free. Telegram confirms your mobile number. This takes about 20 seconds.</p>
+          <ol className="tg-steps">
+            <li>Tap <strong>Open Telegram</strong> below</li>
+            <li>Press <strong>START</strong> in the chat with <strong>@{tg.bot}</strong></li>
+            <li>Tap <strong>📱 Share my phone number</strong></li>
+          </ol>
+          <a className="btn primary wide" href={tg.link} target="_blank" rel="noreferrer">✈️ Open Telegram</a>
+          <p className="waiting" role="status">
+            <span className="spinner" aria-hidden="true" />
+            {tgStatus === 'awaiting_contact'
+              ? 'Now tap “Share my phone number” in Telegram…'
+              : 'Waiting for you to press START in Telegram…'}
+          </p>
+          <p className="muted-inline">
+            This page continues automatically. The link works for 10 minutes.{' '}
+            <button type="button" className="link" onClick={() => { setStep('details'); setError(''); }}>Start over</button>
+          </p>
+        </div>
+      )}
+
+      {step === 'code' && sent && (
         <form onSubmit={confirm}>
           <h1>Enter the code</h1>
           <p className="muted">
-            We sent a 6-digit code by {sent.channel === 'whatsapp' ? 'WhatsApp' : 'SMS'} to <strong>{maskContact(sent.contact)}</strong>. It is valid for 10 minutes.
+            We sent a 6-digit code by {via(sent.channel)} to <strong>{maskContact(sent.contact)}</strong>. It is valid for 10 minutes.
           </p>
           <label className="field">
             <span>Verification code</span>
@@ -150,12 +241,17 @@ function Verify({ onVerified }) {
               {cooldown > 0 ? `Resend code in ${cooldown}s` : 'Resend code'}
             </button>
           </div>
-          {channels?.sms && channels?.whatsapp && (
+          {available.filter((c) => c !== sent.channel).length > 0 && (
             <p className="otp-links center">
               Not getting it?{' '}
-              <button type="button" className="link" disabled={cooldown > 0 || busy} onClick={() => sendCode(null, sent.channel === 'sms' ? 'whatsapp' : 'sms')}>
-                Send it by {sent.channel === 'sms' ? 'WhatsApp' : 'SMS'} instead
-              </button>
+              {available.filter((c) => c !== sent.channel).map((c, i) => (
+                <span key={c}>
+                  {i > 0 && ' · '}
+                  <button type="button" className="link" disabled={(cooldown > 0 && c !== 'telegram') || busy} onClick={() => { setChannel(c); sendCode(null, c); }}>
+                    {c === 'telegram' ? 'Use Telegram (free)' : `Send it by ${via(c)} instead`}
+                  </button>
+                </span>
+              ))}
             </p>
           )}
         </form>

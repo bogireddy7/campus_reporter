@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { db } from './db.js';
 import { otpChannels, parseContact, requestOtp, verifyOtp } from './otp.js';
+import { botName, checkVerification, createVerification, startTelegram, telegramReady } from './telegram.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3001;
@@ -124,19 +125,21 @@ function reporterAuth(req, res, next) {
   }
 }
 
-// Simple in-memory limiter for login / register (slows down password and code guessing).
+// Simple in-memory limiter (slows down password and code guessing). perPath: count each URL separately.
 const attempts = new Map();
-function authLimit(req, res, next) {
-  const key = req.ip + req.path;
+const makeLimit = (max, perPath = true) => (req, res, next) => {
+  const key = req.ip + (perPath ? req.path : '|' + max);
   const now = Date.now();
   const recent = (attempts.get(key) || []).filter((t) => now - t < 15 * 60 * 1000);
-  if (recent.length >= 15) {
+  if (recent.length >= max) {
     return res.status(429).json({ error: 'Too many attempts. Please wait a few minutes and try again.' });
   }
   recent.push(now);
   attempts.set(key, recent);
   next();
-}
+};
+const authLimit = makeLimit(15);
+const pollLimit = makeLimit(1500, false); // the website checks the Telegram result every 2 seconds
 
 const clean = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 const num = (v) => {
@@ -147,7 +150,7 @@ const num = (v) => {
 // ---------- public routes ----------
 app.get('/healthz', (_req, res) => res.send('ok'));
 app.get('/api/meta', (_req, res) =>
-  res.json({ categories: CATEGORIES, priorities: PRIORITIES, statuses: STATUSES, maps_key: process.env.GOOGLE_MAPS_API_KEY || '', otp_channels: otpChannels() })
+  res.json({ categories: CATEGORIES, priorities: PRIORITIES, statuses: STATUSES, maps_key: process.env.GOOGLE_MAPS_API_KEY || '', otp_channels: { ...otpChannels(), telegram: telegramReady() } })
 );
 
 // Step 1: ask for a code (sent by SMS to the mobile number the reporter gave).
@@ -180,6 +183,25 @@ app.post('/api/otp/verify', authLimit, (req, res) => {
   const reporter = { name: result.name, roll_no: result.rollNo, contact: contact.value, contact_type: result.contactType };
   const token = jwt.sign({ kind: 'reporter', ...reporter }, JWT_SECRET, { expiresIn: '60m' });
   res.json({ token, reporter });
+});
+
+// ----- Free verification with Telegram: the student shares their phone number with our bot -----
+app.post('/api/telegram/start', authLimit, (req, res) => {
+  if (!telegramReady()) return res.status(503).json({ error: 'Telegram verification is not set up on this site yet.' });
+  const name = clean(req.body.name, 80);
+  const rollNo = clean(req.body.roll_no, 40);
+  if (!name) return res.status(400).json({ error: 'Please enter your name' });
+  if (!rollNo) return res.status(400).json({ error: 'Please enter your roll number / staff ID' });
+  const token = createVerification({ name, rollNo });
+  res.json({ token, bot: botName(), link: `https://t.me/${botName()}?start=${token}`, expires_in: 600 });
+});
+
+app.get('/api/telegram/status/:token', pollLimit, (req, res) => {
+  const result = checkVerification(clean(req.params.token, 64));
+  if (result.status !== 'verified') return res.json({ status: result.status });
+  const reporter = { name: result.name, roll_no: result.rollNo, contact: result.phone, contact_type: 'phone' };
+  const token = jwt.sign({ kind: 'reporter', ...reporter }, JWT_SECRET, { expiresIn: '60m' });
+  res.json({ status: 'verified', token, reporter });
 });
 
 app.post('/api/issues', reporterAuth, (req, res) => {
@@ -386,8 +408,10 @@ app.listen(PORT, () => {
   console.log(`Staff registration code: ${STAFF_CODE}  (give it only to the HOD and Admin Office)`);
   const ch = otpChannels();
   console.log(`SMS codes: ${ch.sms ? 'ON' : 'off (add FAST2SMS_API_KEY)'}   |   WhatsApp codes: ${ch.whatsapp ? 'ON' : 'off (add WHATSAPP_* settings)'}`);
-  if (!ch.sms && !ch.whatsapp) {
-    console.log('WARNING: no way to send codes is set up, so reporters cannot verify. See README, "Sending the code".');
-  }
+  startTelegram().then(() => {
+    if (!ch.sms && !ch.whatsapp && !telegramReady()) {
+      console.log('WARNING: no way to verify phone numbers is set up, so reporters cannot verify. Run "npm run configure" (Telegram is free).');
+    }
+  });
   if (!process.env.GOOGLE_MAPS_API_KEY) console.log('Google Maps: no GOOGLE_MAPS_API_KEY, the dashboard map shows a list with Navigate links instead.');
 });

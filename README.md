@@ -4,7 +4,7 @@ A college community issue-reporting system. Anyone on campus can report a proble
 
 ## Features
 
-- **Verified reporting**: before reporting, a person enters their name, roll no. / staff ID and their mobile number, then confirms a 6-digit one-time code (OTP) sent by SMS or WhatsApp. Only then can they submit a complaint
+- **Verified reporting**: before reporting, a person enters their name, roll no. / staff ID and their mobile number, then confirms their number. This is free with a Telegram bot (the student taps "Share my phone number"), or with a 6-digit code sent by SMS or WhatsApp (paid). Only then can they submit a complaint
 - **Report form**: camera/photo upload, category (choose **Other** and type your own name for the problem), urgency, description, "Tag my current location" (browser GPS) plus a typed place name
 - **Tracking ID** (e.g. `CR-3M8H2F`) so reporters can check progress without an account (contact details are never shown on the public page)
 - **Staff create their own accounts** (HOD, Admin Office) using a staff access code, then share one dashboard: stats, filters (status / category / priority / search), urgent issues sorted first, auto-refresh every 30 s
@@ -37,7 +37,7 @@ The HOD and the Admin Office person each open **http://localhost:3001/admin/regi
 
 ## Settings (.env file)
 
-**Easiest way for phone verification:** run `npm run configure`. It asks for your SMS / WhatsApp key, saves it for you, and sends a test message to your phone.
+**Easiest way for phone verification:** run `npm run configure`. It asks for your Telegram bot token (free), and optionally SMS / WhatsApp keys, saves it for you, and sends a test message to your phone.
 
 Settings go in a file called `.env` in the project folder, so you do not have to type them each time.
 
@@ -47,9 +47,22 @@ Settings go in a file called `.env` in the project folder, so you do not have to
 
 `.env` is never uploaded to GitHub, so your keys stay private.
 
-### SMS one-time codes (required for reporters)
+### Free phone verification with Telegram (recommended)
 
-Reporters verify with their **mobile number** (Indian numbers). The 6-digit code is sent **to their phone by SMS or WhatsApp**. It is never shown on the screen or in the terminal, so until SMS or WhatsApp is set up reporters cannot verify.
+No money, no SMS provider, unlimited students. The student opens a Telegram link, presses **Start**, and taps **Share my phone number**. Telegram itself confirms that number belongs to that account, and the website continues automatically.
+
+1. In Telegram, chat with **@BotFather**, send `/newbot`, choose a name and a username ending in `bot`. Copy the token it gives you.
+2. Run `npm run configure`, answer **Y** to Telegram and paste the token (or put `TELEGRAM_BOT_TOKEN=...` in `.env`).
+3. `npm start`. You should see `Telegram verification: ON (free)`.
+
+Good to know:
+- Only Indian (+91) numbers are accepted, and the number must be the Telegram account's own (a forwarded contact is refused).
+- The server asks Telegram for new messages continuously, so the site must be running all the time, and **only one copy** of the site may use a given bot token. Use a separate bot for testing on your own computer.
+- Students need the Telegram app (free) on their phone.
+
+### SMS one-time codes (optional, paid)
+
+Reporters verify with their **mobile number** (Indian numbers). The 6-digit code is sent **to their phone by SMS or WhatsApp**. It is never shown on the screen or in the terminal, so until Telegram, SMS or WhatsApp is set up reporters cannot verify.
 
 1. Create a [Fast2SMS](https://www.fast2sms.com) account, copy your API key from **Dev API**, and add some money to the wallet.
 2. Put it in `.env`: `FAST2SMS_API_KEY=your-key`

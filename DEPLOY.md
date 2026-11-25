@@ -8,6 +8,7 @@ An https address is needed so phones can use the **Tag my current location** but
 2. Go to https://render.com, sign up with GitHub, then **New + → Blueprint** and choose the `campus_reporter` repo. Render reads `render.yaml` and sets everything up.
 3. Fill in the secret values it asks for:
    - `STAFF_CODE`: a code only the HOD and Admin Office know (they need it on the sign-up page)
+   - `TELEGRAM_BOT_TOKEN`: free phone verification (README: "Free phone verification with Telegram"). The service must stay awake, and only one copy may use this bot.
    - `FAST2SMS_API_KEY`: your SMS key (see "SMS setup" below)
    - `GOOGLE_MAPS_API_KEY`: for the dashboard map (see the README)
    - Optional: `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`, `WHATSAPP_TEMPLATE` to also send codes by WhatsApp (see the README). On a live site use a permanent token, because the temporary one expires after about a day.

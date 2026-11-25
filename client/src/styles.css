@@ -252,3 +252,10 @@ legend { padding: 0 6px; font-weight: 600; font-size: .9rem; }
 .channel-toggle { display: inline-flex; background: var(--brand-soft); border-radius: 12px; padding: 4px; gap: 4px; }
 .channel-toggle button { border: 0; background: transparent; padding: 8px 18px; border-radius: 9px; font: inherit; font-weight: 600; color: var(--info); cursor: pointer; }
 .channel-toggle button.on { background: #fff; color: var(--brand); box-shadow: 0 1px 4px rgba(40, 36, 110, .18); }
+
+/* Telegram verification */
+.tg-steps { margin: 4px 0 18px; padding-left: 22px; line-height: 1.9; }
+.waiting { display: flex; align-items: center; gap: 10px; background: var(--brand-soft); color: var(--info); border-radius: 10px; padding: 10px 14px; margin: 16px 0 8px; font-size: .93rem; }
+.spinner { width: 16px; height: 16px; border-radius: 50%; border: 3px solid #c3c7ee; border-top-color: var(--brand); animation: spin .9s linear infinite; flex: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } }
