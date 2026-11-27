@@ -22,7 +22,7 @@ function loadGoogleMaps(key, onAuthFailure) {
 }
 
 // Popup content is built from DOM nodes + textContent so complaint text can never inject HTML.
-function popupFor(issue, onOpen) {
+function popupFor(issue, onOpen, onDirections) {
   const box = document.createElement('div');
   box.className = 'map-popup';
   const title = document.createElement('strong');
@@ -40,13 +40,18 @@ function popupFor(issue, onOpen) {
   open.className = 'btn primary small';
   open.textContent = 'Open details';
   open.addEventListener('click', () => onOpen(issue.id));
+  const dir = document.createElement('button');
+  dir.type = 'button';
+  dir.className = 'btn small dir-btn';
+  dir.textContent = '🧭 Directions';
+  dir.addEventListener('click', () => onDirections(issue));
   const nav = document.createElement('a');
   nav.className = 'btn small nav-btn';
   nav.textContent = '➜ Navigate';
   nav.href = navLink(issue.lat, issue.lng);
   nav.target = '_blank';
   nav.rel = 'noopener noreferrer';
-  actions.append(open, nav);
+  actions.append(open, dir, nav);
   box.append(title, meta, place, actions);
   return box;
 }
@@ -86,6 +91,11 @@ export default function MapView({ issues, onOpen, mapsKey }) {
   const fittedKey = useRef('');
   const onOpenRef = useRef(onOpen);
   onOpenRef.current = onOpen;
+  const rendererRef = useRef(null);
+  const [route, setRoute] = useState(null); // { issue, mode, state: 'locating'|'loading'|'ok'|'error', info, steps, error }
+  const startDirections = (issue) => setRoute({ issue, mode: 'WALKING', state: 'locating' });
+  const startRef = useRef(startDirections);
+  startRef.current = startDirections;
   const [ready, setReady] = useState(false);
   const [problem, setProblem] = useState('');
 
@@ -140,7 +150,7 @@ export default function MapView({ issues, onOpen, mapsKey }) {
         },
       });
       marker.addListener('click', () => {
-        infoRef.current.setContent(popupFor(issue, (id) => onOpenRef.current(id)));
+        infoRef.current.setContent(popupFor(issue, (id) => onOpenRef.current(id), (i) => startRef.current(i)));
         infoRef.current.open({ map: mapRef.current, anchor: marker });
       });
       markersRef.current.push(marker);
@@ -158,6 +168,61 @@ export default function MapView({ issues, onOpen, mapsKey }) {
     }
   }, [issues, ready]); // eslint-disable-line react-hooks/exhaustive-deps
 
+
+  // Directions: from the viewer's current location to the complaint, drawn on the map with step-by-step text.
+  const originRef = useRef(null);
+  useEffect(() => {
+    if (!ready || !route) return undefined;
+    const maps = window.google.maps;
+    let cancelled = false;
+    const fail = (error) => !cancelled && setRoute((r) => r && { ...r, state: 'error', error });
+
+    const compute = (origin) => {
+      setRoute((r) => r && { ...r, state: 'loading' });
+      new maps.DirectionsService().route(
+        { origin, destination: { lat: route.issue.lat, lng: route.issue.lng }, travelMode: maps.TravelMode[route.mode] },
+        (result, status) => {
+          if (cancelled) return;
+          if (status !== 'OK') {
+            fail(
+              status === 'ZERO_RESULTS'
+                ? 'No route found between your location and this place for this travel mode. Try the other mode.'
+                : status === 'REQUEST_DENIED' || status === 'UNKNOWN_ERROR'
+                  ? 'Google refused the directions request. In Google Cloud, enable "Directions API" for this key (and make sure billing is on).'
+                  : `Could not get directions (${status}).`
+            );
+            return;
+          }
+          if (!rendererRef.current) rendererRef.current = new maps.DirectionsRenderer({ map: mapRef.current, suppressMarkers: false });
+          rendererRef.current.setMap(mapRef.current);
+          rendererRef.current.setDirections(result);
+          const leg = result.routes[0].legs[0];
+          // Google gives each step as HTML; keep only its text so nothing can be injected.
+          const text = (h) => new DOMParser().parseFromString(h, 'text/html').body.textContent;
+          setRoute((r) => r && {
+            ...r, state: 'ok', info: { distance: leg.distance.text, duration: leg.duration.text, from: leg.start_address },
+            steps: leg.steps.map((st) => ({ text: text(st.instructions), distance: st.distance.text })),
+          });
+        }
+      );
+    };
+
+    if (originRef.current) compute(originRef.current);
+    else if (!navigator.geolocation) fail('This browser cannot share your location. Use the Navigate button instead.');
+    else {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => { originRef.current = { lat: pos.coords.latitude, lng: pos.coords.longitude }; if (!cancelled) compute(originRef.current); },
+        (err) => fail(err.code === 1
+          ? 'Location permission was denied. Allow location for this site in your browser, then try again. (Or use the Navigate button.)'
+          : 'Could not find your location. Use the Navigate button, which asks Google Maps for the start point.'),
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
+      );
+    }
+    return () => { cancelled = true; };
+  }, [route?.issue?.id, route?.mode, ready]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const clearRoute = () => { rendererRef.current?.setMap(null); setRoute(null); };
+
   if (!mapsKey) {
     return <Fallback tagged={tagged} reason="The administrator needs to add a Google Maps key (GOOGLE_MAPS_API_KEY, see the README). Until then, use the Navigate buttons below." />;
   }
@@ -166,6 +231,36 @@ export default function MapView({ issues, onOpen, mapsKey }) {
   return (
     <div className="map-wrap">
       <div ref={elRef} className="map" role="region" aria-label="Map of geo-tagged complaints" />
+      {route && (
+        <div className="dir-panel" role="region" aria-label="Directions">
+          <div className="dir-head">
+            <strong>Directions to {route.issue.title}</strong>
+            <button type="button" className="link" onClick={clearRoute}>✕ Close</button>
+          </div>
+          <div className="channel-toggle" role="radiogroup" aria-label="Travel mode">
+            {[['WALKING', '🚶 Walk'], ['DRIVING', '🚗 Drive'], ['BICYCLING', '🚲 Cycle']].map(([m, label]) => (
+              <button key={m} type="button" role="radio" aria-checked={route.mode === m} className={route.mode === m ? 'on' : ''}
+                onClick={() => setRoute((r) => ({ ...r, mode: m, state: 'loading' }))}>{label}</button>
+            ))}
+          </div>
+          {(route.state === 'locating' || route.state === 'loading') && (
+            <p className="waiting" role="status"><span className="spinner" aria-hidden="true" />{route.state === 'locating' ? 'Finding your location… allow it if your browser asks.' : 'Getting the route…'}</p>
+          )}
+          {route.state === 'error' && (
+            <p className="error-text">{route.error}{' '}
+              <a href={navLink(route.issue.lat, route.issue.lng)} target="_blank" rel="noreferrer">Open in Google Maps ➜</a></p>
+          )}
+          {route.state === 'ok' && (
+            <>
+              <p className="dir-summary"><strong>{route.info.duration}</strong> · {route.info.distance}</p>
+              <ol className="dir-steps">
+                {route.steps.map((st, i) => <li key={i}>{st.text} <span className="muted-inline">({st.distance})</span></li>)}
+              </ol>
+              <a className="btn small nav-btn" href={navLink(route.issue.lat, route.issue.lng)} target="_blank" rel="noreferrer">➜ Start navigation in Google Maps</a>
+            </>
+          )}
+        </div>
+      )}
       <div className="map-legend">
         <span><i style={{ background: PRIORITY_COLOR.urgent }} /> Urgent</span>
         <span><i style={{ background: PRIORITY_COLOR.high }} /> High</span>
